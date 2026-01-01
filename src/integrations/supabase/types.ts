@@ -14,16 +14,214 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      panel_files: {
+        Row: {
+          content: string | null
+          created_at: string
+          id: string
+          is_directory: boolean
+          name: string
+          panel_id: string
+          path: string
+          updated_at: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          is_directory?: boolean
+          name: string
+          panel_id: string
+          path: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          is_directory?: boolean
+          name?: string
+          panel_id?: string
+          path?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "panel_files_panel_id_fkey"
+            columns: ["panel_id"]
+            isOneToOne: false
+            referencedRelation: "panels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      panel_logs: {
+        Row: {
+          created_at: string
+          id: string
+          log_type: string
+          message: string
+          panel_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          log_type?: string
+          message: string
+          panel_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          log_type?: string
+          message?: string
+          panel_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "panel_logs_panel_id_fkey"
+            columns: ["panel_id"]
+            isOneToOne: false
+            referencedRelation: "panels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      panels: {
+        Row: {
+          created_at: string
+          droplet_id: string | null
+          id: string
+          language: Database["public"]["Enums"]["panel_language"]
+          name: string
+          status: Database["public"]["Enums"]["panel_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          droplet_id?: string | null
+          id?: string
+          language: Database["public"]["Enums"]["panel_language"]
+          name: string
+          status?: Database["public"]["Enums"]["panel_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          droplet_id?: string | null
+          id?: string
+          language?: Database["public"]["Enums"]["panel_language"]
+          name?: string
+          status?: Database["public"]["Enums"]["panel_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      premium_requests: {
+        Row: {
+          created_at: string
+          id: string
+          message: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["premium_status"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["premium_status"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["premium_status"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          ban_reason: string | null
+          created_at: string
+          email: string
+          id: string
+          is_banned: boolean
+          premium_status: Database["public"]["Enums"]["premium_status"]
+          updated_at: string
+          username: string | null
+        }
+        Insert: {
+          ban_reason?: string | null
+          created_at?: string
+          email: string
+          id: string
+          is_banned?: boolean
+          premium_status?: Database["public"]["Enums"]["premium_status"]
+          updated_at?: string
+          username?: string | null
+        }
+        Update: {
+          ban_reason?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          is_banned?: boolean
+          premium_status?: Database["public"]["Enums"]["premium_status"]
+          updated_at?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
+      panel_language: "nodejs" | "python"
+      panel_status: "stopped" | "running" | "deploying" | "error"
+      premium_status: "none" | "pending" | "approved" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +348,11 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+      panel_language: ["nodejs", "python"],
+      panel_status: ["stopped", "running", "deploying", "error"],
+      premium_status: ["none", "pending", "approved", "rejected"],
+    },
   },
 } as const
