@@ -24,6 +24,7 @@ import {
 import { FileManager } from '@/components/panel/FileManager';
 import { LogsViewer } from '@/components/panel/LogsViewer';
 import { TerminalView } from '@/components/panel/TerminalView';
+import { ConsoleView } from '@/components/panel/ConsoleView';
 import { PanelSettings } from '@/components/panel/PanelSettings';
 import {
   AlertDialog,
@@ -89,17 +90,18 @@ const PanelPage = () => {
   };
 
   const fetchVmStatus = async () => {
-    if (!id) return;
+    if (!id || !panel) return;
     try {
       const status = await vmApi.getStatus(id);
       setVmStatus(status);
-      // Sync VM status to database
-      if (status.status !== panel?.status) {
+      // Only sync to DB if status meaningfully changed and is stable
+      if (status.status && status.status !== panel.status) {
         await supabase.from('panels').update({ status: status.status }).eq('id', id);
-        if (panel) setPanel({ ...panel, status: status.status });
+        setPanel(prev => prev ? { ...prev, status: status.status } : prev);
       }
     } catch (error) {
       console.error('Failed to fetch VM status:', error);
+      // Don't update status on error - keep existing state
     }
   };
 
@@ -309,8 +311,15 @@ const PanelPage = () => {
       </div>
 
       {/* Main Content */}
-      <Tabs defaultValue="files" className="flex-1 flex flex-col">
+      <Tabs defaultValue="console" className="flex-1 flex flex-col">
         <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent h-auto p-0">
+          <TabsTrigger
+            value="console"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3"
+          >
+            <Terminal className="w-4 h-4 mr-2" />
+            Console
+          </TabsTrigger>
           <TabsTrigger
             value="files"
             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3"
@@ -329,8 +338,8 @@ const PanelPage = () => {
             value="terminal"
             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3"
           >
-            <Terminal className="w-4 h-4 mr-2" />
-            Terminal
+            <Settings className="w-4 h-4 mr-2" />
+            Shell
           </TabsTrigger>
           <TabsTrigger
             value="settings"
@@ -340,6 +349,10 @@ const PanelPage = () => {
             Settings
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="console" className="flex-1 m-0">
+          <ConsoleView panelId={panel.id} panelStatus={panel.status} />
+        </TabsContent>
 
         <TabsContent value="files" className="flex-1 m-0">
           <FileManager panelId={panel.id} />
