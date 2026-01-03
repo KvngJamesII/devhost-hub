@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { vmApi, FileEntry } from '@/lib/vmApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,14 +32,15 @@ import {
   FilePlus,
   X,
   Save,
+  RefreshCw,
 } from 'lucide-react';
 
 interface PanelFile {
-  id: string;
   name: string;
   path: string;
-  content: string | null;
-  is_directory: boolean;
+  type: 'file' | 'directory';
+  size: number | null;
+  content?: string;
 }
 
 interface FileManagerProps {
@@ -47,7 +49,7 @@ interface FileManagerProps {
 
 export function FileManager({ panelId }: FileManagerProps) {
   const [files, setFiles] = useState<PanelFile[]>([]);
-  const [currentPath, setCurrentPath] = useState('/');
+  const [currentPath, setCurrentPath] = useState('');
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -64,44 +66,43 @@ export function FileManager({ panelId }: FileManagerProps) {
   }, [panelId, currentPath]);
 
   const fetchFiles = async () => {
-    const { data, error } = await supabase
-      .from('panel_files')
-      .select('*')
-      .eq('panel_id', panelId)
-      .eq('path', currentPath)
-      .order('is_directory', { ascending: false })
-      .order('name');
-
-    if (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to load files',
-        variant: 'destructive',
+    setLoading(true);
+    try {
+      const result = await vmApi.listFiles(panelId, currentPath);
+      const mappedFiles: PanelFile[] = result.files.map((f: FileEntry) => ({
+        name: f.name,
+        path: f.path,
+        type: f.type,
+        size: f.size,
+      }));
+      // Sort: directories first, then by name
+      mappedFiles.sort((a, b) => {
+        if (a.type === 'directory' && b.type !== 'directory') return -1;
+        if (a.type !== 'directory' && b.type === 'directory') return 1;
+        return a.name.localeCompare(b.name);
       });
-    } else {
-      setFiles(data as PanelFile[]);
+      setFiles(mappedFiles);
+    } catch (error: any) {
+      console.error('Failed to load files:', error);
+      // If directory doesn't exist yet, show empty
+      setFiles([]);
     }
     setLoading(false);
   };
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
+    setSaving(true);
 
-    const { error } = await supabase.from('panel_files').insert({
-      panel_id: panelId,
-      name: newName.trim(),
-      path: currentPath,
-      is_directory: createType === 'folder',
-      content: createType === 'file' ? '' : null,
-    });
-
-    if (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to create ' + createType,
-        variant: 'destructive',
-      });
-    } else {
+    try {
+      const filePath = currentPath ? `${currentPath}/${newName.trim()}` : newName.trim();
+      
+      if (createType === 'folder') {
+        await vmApi.createDirectory(panelId, filePath);
+      } else {
+        await vmApi.syncFiles(panelId, [{ path: filePath, content: '' }]);
+      }
+      
       toast({
         title: 'Created',
         description: `${createType === 'folder' ? 'Folder' : 'File'} created successfully`,
@@ -109,97 +110,117 @@ export function FileManager({ panelId }: FileManagerProps) {
       setNewName('');
       setShowCreateDialog(false);
       fetchFiles();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create ' + createType,
+        variant: 'destructive',
+      });
     }
+    setSaving(false);
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFiles = e.target.files;
     if (!uploadedFiles) return;
 
-    for (const file of Array.from(uploadedFiles)) {
-      const content = await file.text();
-      await supabase.from('panel_files').insert({
-        panel_id: panelId,
-        name: file.name,
-        path: currentPath,
-        is_directory: false,
-        content,
+    try {
+      const filesToSync = await Promise.all(
+        Array.from(uploadedFiles).map(async (file) => {
+          const content = await file.text();
+          const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
+          return { path: filePath, content };
+        })
+      );
+
+      await vmApi.syncFiles(panelId, filesToSync);
+
+      toast({
+        title: 'Uploaded',
+        description: `${uploadedFiles.length} file(s) uploaded`,
+      });
+      fetchFiles();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to upload files',
+        variant: 'destructive',
       });
     }
-
-    toast({
-      title: 'Uploaded',
-      description: `${uploadedFiles.length} file(s) uploaded`,
-    });
-    fetchFiles();
+    
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
   const handleDelete = async (file: PanelFile) => {
-    const { error } = await supabase.from('panel_files').delete().eq('id', file.id);
-
-    if (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to delete',
-        variant: 'destructive',
-      });
-    } else {
+    try {
+      await vmApi.deleteFile(panelId, file.path);
       toast({
         title: 'Deleted',
         description: `${file.name} deleted`,
       });
       fetchFiles();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete',
+        variant: 'destructive',
+      });
     }
   };
 
-  const handleEdit = (file: PanelFile) => {
+  const handleEdit = async (file: PanelFile) => {
     setEditingFile(file);
-    setEditContent(file.content || '');
+    setEditContent('');
     setShowEditDialog(true);
+    
+    try {
+      const result = await vmApi.getFileContent(panelId, file.path);
+      setEditContent(result.content);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to load file content',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleSave = async () => {
     if (!editingFile) return;
     setSaving(true);
 
-    const { error } = await supabase
-      .from('panel_files')
-      .update({ content: editContent })
-      .eq('id', editingFile.id);
-
-    if (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to save file',
-        variant: 'destructive',
-      });
-    } else {
+    try {
+      await vmApi.syncFiles(panelId, [{ path: editingFile.path, content: editContent }]);
       toast({
         title: 'Saved',
         description: 'File saved successfully',
       });
       setShowEditDialog(false);
       setEditingFile(null);
-      fetchFiles();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to save file',
+        variant: 'destructive',
+      });
     }
     setSaving(false);
   };
 
   const navigateToFolder = (folder: PanelFile) => {
-    setCurrentPath(currentPath + folder.name + '/');
+    setCurrentPath(folder.path);
   };
 
   const navigateUp = () => {
     const parts = currentPath.split('/').filter(Boolean);
     parts.pop();
-    setCurrentPath('/' + (parts.length > 0 ? parts.join('/') + '/' : ''));
+    setCurrentPath(parts.join('/'));
   };
 
   const getFileIcon = (file: PanelFile) => {
-    if (file.is_directory) {
+    if (file.type === 'directory') {
       return <Folder className="w-5 h-5 text-warning" />;
     }
     const ext = file.name.split('.').pop()?.toLowerCase();
@@ -214,10 +235,10 @@ export function FileManager({ panelId }: FileManagerProps) {
       {/* Toolbar */}
       <div className="p-3 border-b border-border flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 overflow-x-auto">
-          <Button variant="ghost" size="sm" onClick={navigateUp} disabled={currentPath === '/'}>
+          <Button variant="ghost" size="sm" onClick={navigateUp} disabled={!currentPath}>
             ..
           </Button>
-          <span className="text-sm text-muted-foreground font-mono truncate">{currentPath}</span>
+          <span className="text-sm text-muted-foreground font-mono truncate">/{currentPath || ''}</span>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -242,6 +263,9 @@ export function FileManager({ panelId }: FileManagerProps) {
           </Button>
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
             <Upload className="w-4 h-4" />
+          </Button>
+          <Button variant="outline" size="sm" onClick={fetchFiles} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
           <input
             ref={fileInputRef}
@@ -269,17 +293,22 @@ export function FileManager({ panelId }: FileManagerProps) {
           <div className="space-y-1">
             {files.map((file) => (
               <div
-                key={file.id}
+                key={file.path}
                 className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors group"
               >
                 <button
                   className="flex items-center gap-3 flex-1 text-left"
                   onClick={() =>
-                    file.is_directory ? navigateToFolder(file) : handleEdit(file)
+                    file.type === 'directory' ? navigateToFolder(file) : handleEdit(file)
                   }
                 >
                   {getFileIcon(file)}
                   <span className="truncate">{file.name}</span>
+                  {file.size !== null && file.type === 'file' && (
+                    <span className="text-xs text-muted-foreground ml-auto mr-2">
+                      {file.size < 1024 ? `${file.size} B` : `${(file.size / 1024).toFixed(1)} KB`}
+                    </span>
+                  )}
                 </button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -292,7 +321,7 @@ export function FileManager({ panelId }: FileManagerProps) {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    {!file.is_directory && (
+                    {file.type === 'file' && (
                       <DropdownMenuItem onClick={() => handleEdit(file)}>
                         <Edit className="w-4 h-4 mr-2" />
                         Edit

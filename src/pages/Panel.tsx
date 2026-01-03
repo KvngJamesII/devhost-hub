@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { vmApi, AppStatus } from '@/lib/vmApi';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +19,7 @@ import {
   FileText,
   Settings,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { FileManager } from '@/components/panel/FileManager';
 import { LogsViewer } from '@/components/panel/LogsViewer';
@@ -46,6 +48,7 @@ const PanelPage = () => {
   const { id } = useParams<{ id: string }>();
   const { user, loading: authLoading } = useAuth();
   const [panel, setPanel] = useState<Panel | null>(null);
+  const [vmStatus, setVmStatus] = useState<AppStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -85,64 +88,103 @@ const PanelPage = () => {
     setLoading(false);
   };
 
-  const handleStart = async () => {
-    setActionLoading(true);
-    const { error } = await supabase
-      .from('panels')
-      .update({ status: 'deploying' })
-      .eq('id', id);
+  const fetchVmStatus = async () => {
+    if (!id) return;
+    try {
+      const status = await vmApi.getStatus(id);
+      setVmStatus(status);
+      // Sync VM status to database
+      if (status.status !== panel?.status) {
+        await supabase.from('panels').update({ status: status.status }).eq('id', id);
+        if (panel) setPanel({ ...panel, status: status.status });
+      }
+    } catch (error) {
+      console.error('Failed to fetch VM status:', error);
+    }
+  };
 
-    if (error) {
+  useEffect(() => {
+    if (panel) {
+      fetchVmStatus();
+      const interval = setInterval(fetchVmStatus, 10000); // Poll every 10s
+      return () => clearInterval(interval);
+    }
+  }, [panel?.id]);
+
+  const handleStart = async () => {
+    if (!id || !panel) return;
+    setActionLoading(true);
+    
+    try {
+      await supabase.from('panels').update({ status: 'deploying' }).eq('id', id);
+      setPanel({ ...panel, status: 'deploying' });
+      
+      const result = await vmApi.deploy(id, panel.language);
+      
+      await supabase.from('panels').update({ status: 'running' }).eq('id', id);
+      await supabase.from('panel_logs').insert({
+        panel_id: id,
+        message: `Panel deployed on port ${result.port}`,
+        log_type: 'success',
+      });
+      
+      setPanel({ ...panel, status: 'running' });
+      toast({
+        title: 'Success',
+        description: result.message || 'Panel is now running',
+      });
+      fetchVmStatus();
+    } catch (error: any) {
+      await supabase.from('panels').update({ status: 'error' }).eq('id', id);
+      setPanel({ ...panel, status: 'error' });
       toast({
         title: 'Error',
-        description: 'Failed to start panel',
+        description: error.message || 'Failed to start panel',
         variant: 'destructive',
       });
-    } else {
-      // Simulate deployment (in real app, this would trigger DigitalOcean deployment)
-      setTimeout(async () => {
-        await supabase.from('panels').update({ status: 'running' }).eq('id', id);
-        await supabase.from('panel_logs').insert({
-          panel_id: id,
-          message: 'Panel started successfully',
-          log_type: 'info',
-        });
-        fetchPanel();
-        toast({
-          title: 'Success',
-          description: 'Panel is now running',
-        });
-      }, 2000);
     }
     setActionLoading(false);
   };
 
   const handleStop = async () => {
+    if (!id || !panel) return;
     setActionLoading(true);
-    const { error } = await supabase.from('panels').update({ status: 'stopped' }).eq('id', id);
-
-    if (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to stop panel',
-        variant: 'destructive',
-      });
-    } else {
+    
+    try {
+      await vmApi.stop(id);
+      await supabase.from('panels').update({ status: 'stopped' }).eq('id', id);
       await supabase.from('panel_logs').insert({
         panel_id: id,
         message: 'Panel stopped',
         log_type: 'info',
       });
-      fetchPanel();
+      
+      setPanel({ ...panel, status: 'stopped' });
       toast({
         title: 'Success',
         description: 'Panel stopped',
+      });
+      fetchVmStatus();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to stop panel',
+        variant: 'destructive',
       });
     }
     setActionLoading(false);
   };
 
   const handleDelete = async () => {
+    if (!id) return;
+    
+    try {
+      // Delete from VM first
+      await vmApi.delete(id);
+    } catch (error) {
+      console.error('VM delete error (may not exist):', error);
+    }
+    
     const { error } = await supabase.from('panels').delete().eq('id', id);
 
     if (error) {

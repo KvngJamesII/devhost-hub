@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Terminal, Send, Trash2 } from 'lucide-react';
+import { Terminal, Send, Trash2, Loader2 } from 'lucide-react';
+import { vmApi } from '@/lib/vmApi';
 
 interface TerminalViewProps {
   panelId: string;
@@ -31,6 +32,7 @@ export function TerminalView({ panelId, panelStatus }: TerminalViewProps) {
     },
   ]);
   const [input, setInput] = useState('');
+  const [executing, setExecuting] = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -38,7 +40,7 @@ export function TerminalView({ panelId, panelStatus }: TerminalViewProps) {
     terminalRef.current?.scrollTo(0, terminalRef.current.scrollHeight);
   }, [lines]);
 
-  const handleCommand = (command: string) => {
+  const handleCommand = async (command: string) => {
     const trimmed = command.trim();
     if (!trimmed) return;
 
@@ -50,58 +52,71 @@ export function TerminalView({ panelId, panelStatus }: TerminalViewProps) {
       timestamp: new Date(),
     };
     setLines((prev) => [...prev, inputLine]);
-
-    // Simulate command response
-    setTimeout(() => {
-      let response: TerminalLine;
-
-      if (panelStatus !== 'running') {
-        response = {
-          id: (Date.now() + 1).toString(),
-          type: 'error',
-          content: 'Error: Panel is not running. Start the panel first.',
-          timestamp: new Date(),
-        };
-      } else if (trimmed === 'help') {
-        response = {
-          id: (Date.now() + 1).toString(),
-          type: 'output',
-          content: `Available commands:
-  help      - Show this help message
-  status    - Show panel status
-  clear     - Clear terminal
-  restart   - Restart the application
-  logs      - Show recent logs`,
-          timestamp: new Date(),
-        };
-      } else if (trimmed === 'status') {
-        response = {
-          id: (Date.now() + 1).toString(),
-          type: 'output',
-          content: `Panel Status: ${panelStatus.toUpperCase()}
-Panel ID: ${panelId}`,
-          timestamp: new Date(),
-        };
-      } else if (trimmed === 'clear') {
-        setLines([]);
-        return;
-      } else {
-        response = {
-          id: (Date.now() + 1).toString(),
-          type: 'output',
-          content: `Command executed: ${trimmed}`,
-          timestamp: new Date(),
-        };
-      }
-
-      setLines((prev) => [...prev, response]);
-    }, 200);
-
     setInput('');
+
+    // Handle local commands
+    if (trimmed === 'clear') {
+      setLines([]);
+      return;
+    }
+
+    if (trimmed === 'help') {
+      setLines((prev) => [...prev, {
+        id: (Date.now() + 1).toString(),
+        type: 'output',
+        content: `Available commands:
+  help      - Show this help message
+  clear     - Clear terminal
+  Any other command will be executed on the server`,
+        timestamp: new Date(),
+      }]);
+      return;
+    }
+
+    // Execute on VM
+    setExecuting(true);
+    try {
+      const result = await vmApi.exec(panelId, trimmed);
+      
+      if (result.stdout) {
+        setLines((prev) => [...prev, {
+          id: (Date.now() + 1).toString(),
+          type: 'output',
+          content: result.stdout,
+          timestamp: new Date(),
+        }]);
+      }
+      
+      if (result.stderr) {
+        setLines((prev) => [...prev, {
+          id: (Date.now() + 2).toString(),
+          type: 'error',
+          content: result.stderr,
+          timestamp: new Date(),
+        }]);
+      }
+      
+      if (!result.stdout && !result.stderr) {
+        setLines((prev) => [...prev, {
+          id: (Date.now() + 1).toString(),
+          type: 'output',
+          content: '(command completed with no output)',
+          timestamp: new Date(),
+        }]);
+      }
+    } catch (error: any) {
+      setLines((prev) => [...prev, {
+        id: (Date.now() + 1).toString(),
+        type: 'error',
+        content: `Error: ${error.message}`,
+        timestamp: new Date(),
+      }]);
+    }
+    setExecuting(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !executing) {
       handleCommand(input);
     }
   };
@@ -157,8 +172,8 @@ Panel ID: ${panelId}`,
             placeholder="Type a command..."
             className="flex-1 font-mono text-sm border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-0"
           />
-          <Button size="icon" variant="ghost" onClick={() => handleCommand(input)}>
-            <Send className="w-4 h-4" />
+          <Button size="icon" variant="ghost" onClick={() => handleCommand(input)} disabled={executing}>
+            {executing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </Button>
         </div>
       </div>
