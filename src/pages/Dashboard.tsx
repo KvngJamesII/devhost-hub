@@ -133,7 +133,7 @@ const Dashboard = () => {
                 <Terminal className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h1 className="font-mono font-bold text-lg">iDev Host</h1>
+                <h1 className="font-mono font-bold text-lg text-foreground">iDev Host</h1>
                 <p className="text-xs text-muted-foreground font-mono">
                   <span className="text-success">●</span> {profile?.username || profile?.email?.split('@')[0]}
                 </p>
@@ -163,7 +163,7 @@ const Dashboard = () => {
               <Server className="w-4 h-4 text-primary" />
               <span className="text-xs text-muted-foreground font-mono uppercase">Panels</span>
             </div>
-            <p className="text-2xl font-mono font-bold">{panels.length}<span className="text-sm text-muted-foreground">/{MAX_PANELS}</span></p>
+            <p className="text-2xl font-mono font-bold text-foreground">{panels.length}<span className="text-sm text-muted-foreground">/{MAX_PANELS}</span></p>
           </div>
           <div className="bg-card border border-border rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -197,7 +197,7 @@ const Dashboard = () => {
                   <Crown className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="font-mono font-semibold">Upgrade to Premium</p>
+                  <p className="font-mono font-semibold text-foreground">Upgrade to Premium</p>
                   <p className="text-xs text-muted-foreground">Unlock panel hosting capabilities</p>
                 </div>
               </div>
@@ -223,7 +223,7 @@ const Dashboard = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h2 className="font-mono font-semibold text-lg">Panels</h2>
+              <h2 className="font-mono font-semibold text-lg text-foreground">Panels</h2>
               <span className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
                 {panels.length} total
               </span>
@@ -245,7 +245,7 @@ const Dashboard = () => {
               <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-muted/50 flex items-center justify-center">
                 <Terminal className="w-8 h-8 text-muted-foreground" />
               </div>
-              <p className="font-mono font-medium mb-1">No Panels Yet</p>
+              <p className="font-mono font-medium mb-1 text-foreground">No Panels Yet</p>
               <p className="text-sm text-muted-foreground mb-4">
                 {isPremium 
                   ? 'Create your first panel to start hosting'
@@ -297,7 +297,7 @@ const Dashboard = () => {
                         
                         {/* Panel Info */}
                         <div className="flex-1 min-w-0">
-                          <p className="font-mono font-medium truncate">{panel.name}</p>
+                          <p className="font-mono font-medium truncate text-foreground">{panel.name}</p>
                           <p className="text-xs text-muted-foreground font-mono">
                             {panel.language === 'nodejs' ? 'Node.js' : 'Python'} • {new Date(panel.created_at).toLocaleDateString()}
                           </p>
