@@ -1,0 +1,17 @@
+{
+  "name": "idev-api",
+  "version": "1.0.0",
+  "description": "iDev Host VM Backend API",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "pm2": "^5.3.0"
+  }
+}
