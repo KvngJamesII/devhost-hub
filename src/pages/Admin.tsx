@@ -28,6 +28,7 @@ import {
   Trash2,
   Eye,
   MoreVertical,
+  Plus,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -127,6 +128,8 @@ const Admin = () => {
   const [viewingUser, setViewingUser] = useState<User | null>(null);
   const [userPanels, setUserPanels] = useState<UserPanel[]>([]);
   const [loadingPanels, setLoadingPanels] = useState(false);
+  const [addPanelsUser, setAddPanelsUser] = useState<User | null>(null);
+  const [panelsToAdd, setPanelsToAdd] = useState('1');
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -291,6 +294,36 @@ const Admin = () => {
     
     setUserPanels((panels || []) as UserPanel[]);
     setLoadingPanels(false);
+  };
+
+  const handleAddPanels = async () => {
+    if (!addPanelsUser) return;
+    
+    const numPanels = parseInt(panelsToAdd) || 0;
+    if (numPanels <= 0) {
+      toast({ title: 'Error', description: 'Please enter a valid number', variant: 'destructive' });
+      return;
+    }
+
+    const newLimit = (addPanelsUser.panels_limit || 0) + numPanels;
+    
+    const { error } = await supabase
+      .from('profiles')
+      .update({ panels_limit: newLimit })
+      .eq('id', addPanelsUser.id);
+
+    if (error) {
+      toast({ title: 'Error', description: 'Failed to update panel limit', variant: 'destructive' });
+    } else {
+      toast({ 
+        title: 'Panels Added', 
+        description: `Added ${numPanels} panel slot${numPanels > 1 ? 's' : ''} to ${addPanelsUser.email}. New limit: ${newLimit}` 
+      });
+      fetchData();
+    }
+
+    setAddPanelsUser(null);
+    setPanelsToAdd('1');
   };
 
   const handleCopyCode = (code: string) => {
@@ -559,6 +592,13 @@ const Admin = () => {
                             <Crown className="w-4 h-4 mr-2" />
                             {u.premium_status === 'approved' ? 'Revoke Premium' : 'Grant Premium'}
                           </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => {
+                            setAddPanelsUser(u);
+                            setPanelsToAdd('1');
+                          }}>
+                            <Plus className="w-4 h-4 mr-2" />
+                            Add Panels
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => {
                               setActionUser(u);
@@ -718,6 +758,42 @@ const Admin = () => {
         onOpenChange={setShowRedeemDialog}
         onCreated={fetchData}
       />
+
+      {/* Add Panels Dialog */}
+      <AlertDialog open={!!addPanelsUser} onOpenChange={() => setAddPanelsUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5 text-primary" />
+              Add Panel Slots
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Add panel slots to {addPanelsUser?.email}. Current limit: {addPanelsUser?.panels_limit || 0}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <label className="text-sm font-medium text-foreground">Number of panels to add</label>
+            <Input
+              type="number"
+              min="1"
+              max="50"
+              value={panelsToAdd}
+              onChange={(e) => setPanelsToAdd(e.target.value)}
+              className="mt-2 font-mono"
+              placeholder="1"
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              New limit will be: {(addPanelsUser?.panels_limit || 0) + (parseInt(panelsToAdd) || 0)}
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleAddPanels}>
+              Add Panels
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
