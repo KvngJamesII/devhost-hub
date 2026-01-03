@@ -231,6 +231,8 @@ const PanelPage = () => {
 
   if (!panel) return null;
 
+  const effectiveStatus = (vmStatus?.status ?? panel.status) as Panel['status'];
+
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Header */}
@@ -258,14 +260,14 @@ const PanelPage = () => {
               </p>
             </div>
           </div>
-          {getStatusBadge(panel.status)}
+          {getStatusBadge(effectiveStatus)}
         </div>
       </header>
 
       {/* Action Bar */}
       <div className="px-4 py-3 border-b border-border bg-card/50">
         <div className="flex items-center gap-2">
-          {panel.status === 'running' ? (
+          {effectiveStatus === 'running' ? (
             <Button
               variant="outline"
               size="sm"
@@ -286,10 +288,10 @@ const PanelPage = () => {
             <Button
               size="sm"
               onClick={handleStart}
-              disabled={actionLoading || panel.status === 'deploying'}
+              disabled={actionLoading || effectiveStatus === 'deploying'}
               className="flex-1 bg-gradient-primary hover:opacity-90"
             >
-              {actionLoading || panel.status === 'deploying' ? (
+              {actionLoading || effectiveStatus === 'deploying' ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <>
@@ -351,7 +353,7 @@ const PanelPage = () => {
         </TabsList>
 
         <TabsContent value="console" className="flex-1 m-0">
-          <ConsoleView panelId={panel.id} panelStatus={panel.status} />
+          <ConsoleView panelId={panel.id} panelStatus={effectiveStatus} />
         </TabsContent>
 
         <TabsContent value="files" className="flex-1 m-0">
@@ -363,7 +365,7 @@ const PanelPage = () => {
         </TabsContent>
 
         <TabsContent value="terminal" className="flex-1 m-0">
-          <TerminalView panelId={panel.id} panelStatus={panel.status} />
+          <TerminalView panelId={panel.id} panelStatus={effectiveStatus} />
         </TabsContent>
 
         <TabsContent value="settings" className="flex-1 m-0">
