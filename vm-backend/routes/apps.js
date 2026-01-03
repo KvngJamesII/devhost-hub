@@ -122,11 +122,60 @@ router.post('/:panelId/start', async (req, res) => {
       if (!fs.existsSync(path.join(appDir, script))) {
         return res.status(400).json({ error: `Entry point ${script} not found` });
       }
-    } else if (language === 'python') {
-      script = `./venv/bin/python ${entryPoint || 'main.py'}`;
-      if (!fs.existsSync(path.join(appDir, entryPoint || 'main.py'))) {
-        return res.status(400).json({ error: `Entry point ${entryPoint || 'main.py'} not found` });
+      
+      // Install npm dependencies if package.json exists
+      const packageJsonPath = path.join(appDir, 'package.json');
+      const nodeModulesPath = path.join(appDir, 'node_modules');
+      if (fs.existsSync(packageJsonPath)) {
+        // Always run npm install to ensure deps are up to date
+        console.log(`Installing/updating npm dependencies for ${panelId}`);
+        try {
+          await execAsync(`cd "${appDir}" && npm install`, { timeout: 120000 });
+        } catch (npmErr) {
+          console.error(`npm install failed for ${panelId}:`, npmErr.message);
+          return res.status(500).json({ error: `Failed to install dependencies: ${npmErr.message}` });
+        }
       }
+    } else if (language === 'python') {
+      const entryFile = entryPoint || 'main.py';
+      const venvPath = path.join(appDir, 'venv');
+      const venvPython = path.join(venvPath, 'bin', 'python');
+      const venvPip = path.join(venvPath, 'bin', 'pip');
+      const requirementsPath = path.join(appDir, 'requirements.txt');
+
+      if (!fs.existsSync(path.join(appDir, entryFile))) {
+        return res.status(400).json({ error: `Entry point ${entryFile} not found` });
+      }
+
+      // Create or recreate venv if missing or corrupted
+      if (!fs.existsSync(venvPython)) {
+        console.log(`Creating venv for ${panelId} (missing or corrupted)`);
+        // Remove any existing corrupted venv
+        if (fs.existsSync(venvPath)) {
+          await execAsync(`rm -rf "${venvPath}"`);
+        }
+        try {
+          await execAsync(`cd "${appDir}" && python3 -m venv venv`, { timeout: 60000 });
+        } catch (venvErr) {
+          console.error(`venv creation failed for ${panelId}:`, venvErr.message);
+          return res.status(500).json({ error: `Failed to create virtual environment: ${venvErr.message}` });
+        }
+      }
+
+      // Install requirements if exists
+      if (fs.existsSync(requirementsPath)) {
+        console.log(`Installing pip dependencies for ${panelId}`);
+        try {
+          // Upgrade pip first, then install requirements
+          await execAsync(`cd "${appDir}" && "${venvPip}" install --upgrade pip`, { timeout: 60000 });
+          await execAsync(`cd "${appDir}" && "${venvPip}" install -r requirements.txt`, { timeout: 300000 });
+        } catch (pipErr) {
+          console.error(`pip install failed for ${panelId}:`, pipErr.message);
+          return res.status(500).json({ error: `Failed to install Python dependencies: ${pipErr.message}` });
+        }
+      }
+
+      script = `./venv/bin/python ${entryFile}`;
     } else {
       return res.status(400).json({ error: 'Invalid language' });
     }
