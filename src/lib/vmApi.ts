@@ -10,6 +10,7 @@ export interface AppStatus {
   memory?: number;
   cpu?: number;
   uptime?: number;
+  restarts?: number;
 }
 
 export interface FileEntry {

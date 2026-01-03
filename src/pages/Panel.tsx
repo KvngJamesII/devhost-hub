@@ -20,6 +20,10 @@ import {
   Settings,
   AlertCircle,
   RefreshCw,
+  Cpu,
+  MemoryStick,
+  Clock,
+  RotateCcw,
 } from 'lucide-react';
 import { FileManager } from '@/components/panel/FileManager';
 import { LogsViewer } from '@/components/panel/LogsViewer';
@@ -152,6 +156,33 @@ const PanelPage = () => {
     setActionLoading(false);
   };
 
+  const handleRestart = async () => {
+    if (!id || !panel) return;
+    setActionLoading(true);
+    
+    try {
+      await vmApi.restart(id);
+      await supabase.from('panel_logs').insert({
+        panel_id: id,
+        message: 'Panel restarted',
+        log_type: 'info',
+      });
+      
+      toast({
+        title: 'Success',
+        description: 'Panel restarted',
+      });
+      fetchVmStatus();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to restart panel',
+        variant: 'destructive',
+      });
+    }
+    setActionLoading(false);
+  };
+
   const handleStop = async () => {
     if (!id || !panel) return;
     setActionLoading(true);
@@ -231,6 +262,18 @@ const PanelPage = () => {
 
   if (!panel) return null;
 
+  const formatUptime = (ms: number): string => {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (days > 0) return `${days}d ${hours % 24}h`;
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    if (minutes > 0) return `${minutes}m`;
+    return `${seconds}s`;
+  };
+
   const effectiveStatus = (vmStatus?.status ?? panel.status) as Panel['status'];
 
   return (
@@ -267,40 +310,47 @@ const PanelPage = () => {
       {/* Action Bar */}
       <div className="px-4 py-3 border-b border-border bg-card/50">
         <div className="flex items-center gap-2">
-          {effectiveStatus === 'running' ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleStop}
-              disabled={actionLoading}
-              className="flex-1"
-            >
-              {actionLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <>
-                  <Square className="w-4 h-4 mr-1" />
-                  Stop
-                </>
-              )}
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              onClick={handleStart}
-              disabled={actionLoading || effectiveStatus === 'deploying'}
-              className="flex-1 bg-gradient-primary hover:opacity-90"
-            >
-              {actionLoading || effectiveStatus === 'deploying' ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <>
-                  <Play className="w-4 h-4 mr-1" />
-                  Start
-                </>
-              )}
-            </Button>
-          )}
+          <Button
+            size="sm"
+            onClick={handleStart}
+            disabled={actionLoading || effectiveStatus === 'running' || effectiveStatus === 'deploying'}
+            className="flex-1 bg-gradient-primary hover:opacity-90 disabled:opacity-50"
+          >
+            {actionLoading && effectiveStatus !== 'running' ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <Play className="w-4 h-4 mr-1" />
+                Start
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRestart}
+            disabled={actionLoading || effectiveStatus !== 'running'}
+            className="flex-1"
+          >
+            {actionLoading && effectiveStatus === 'running' ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4 mr-1" />
+                Restart
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleStop}
+            disabled={actionLoading || effectiveStatus !== 'running'}
+            className="flex-1"
+          >
+            <Square className="w-4 h-4 mr-1" />
+            Stop
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -311,6 +361,38 @@ const PanelPage = () => {
           </Button>
         </div>
       </div>
+
+      {/* Resource Metrics */}
+      {vmStatus && effectiveStatus === 'running' && (
+        <div className="px-4 py-3 border-b border-border bg-card/30">
+          <div className="grid grid-cols-4 gap-3">
+            <div className="flex flex-col items-center p-2 rounded-lg bg-muted/50">
+              <Cpu className="w-4 h-4 text-primary mb-1" />
+              <span className="text-xs text-muted-foreground">CPU</span>
+              <span className="text-sm font-semibold">{vmStatus.cpu?.toFixed(1) ?? 0}%</span>
+            </div>
+            <div className="flex flex-col items-center p-2 rounded-lg bg-muted/50">
+              <MemoryStick className="w-4 h-4 text-primary mb-1" />
+              <span className="text-xs text-muted-foreground">Memory</span>
+              <span className="text-sm font-semibold">
+                {vmStatus.memory ? `${(vmStatus.memory / 1024 / 1024).toFixed(1)}MB` : '0MB'}
+              </span>
+            </div>
+            <div className="flex flex-col items-center p-2 rounded-lg bg-muted/50">
+              <Clock className="w-4 h-4 text-primary mb-1" />
+              <span className="text-xs text-muted-foreground">Uptime</span>
+              <span className="text-sm font-semibold">
+                {vmStatus.uptime ? formatUptime(vmStatus.uptime) : '0s'}
+              </span>
+            </div>
+            <div className="flex flex-col items-center p-2 rounded-lg bg-muted/50">
+              <RotateCcw className="w-4 h-4 text-primary mb-1" />
+              <span className="text-xs text-muted-foreground">Restarts</span>
+              <span className="text-sm font-semibold">{vmStatus.restarts ?? 0}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <Tabs defaultValue="console" className="flex-1 flex flex-col">
