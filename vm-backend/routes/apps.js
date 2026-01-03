@@ -75,15 +75,30 @@ router.post('/:panelId/deploy', async (req, res) => {
     } else if (language === 'python') {
       // Create virtual environment if it doesn't exist
       const venvPath = path.join(appDir, 'venv');
-      if (!fs.existsSync(venvPath)) {
+      const venvPython = path.join(venvPath, 'bin', 'python');
+      const venvPip = path.join(venvPath, 'bin', 'pip');
+
+      if (!fs.existsSync(venvPython)) {
         console.log(`Creating venv for ${panelId}`);
-        await execAsync(`cd "${appDir}" && python3 -m venv venv`);
+        if (fs.existsSync(venvPath)) {
+          await execAsync(`rm -rf "${venvPath}"`);
+        }
+        await execAsync(`cd "${appDir}" && python3 -m venv venv`, { timeout: 60000 });
       }
       
       // Install requirements if exists
       if (fs.existsSync(path.join(appDir, 'requirements.txt'))) {
         console.log(`Installing pip dependencies for ${panelId}`);
-        await execAsync(`cd "${appDir}" && ./venv/bin/pip install -r requirements.txt`);
+        try {
+          // Upgrade pip first
+          await execAsync(`"${venvPip}" install --upgrade pip`, { timeout: 60000 });
+          // Install requirements
+          await execAsync(`cd "${appDir}" && "${venvPip}" install -r requirements.txt`, { timeout: 300000 });
+        } catch (pipErr) {
+          console.error(`Initial pip install failed for ${panelId}:`, pipErr.message);
+          // Don't throw here, let the user see the error in logs if possible, 
+          // but we've already improved the start/restart logic to handle this too.
+        }
       }
     }
 

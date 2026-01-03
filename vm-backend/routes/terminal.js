@@ -97,6 +97,12 @@ router.post('/:panelId/exec', async (req, res) => {
       const venvPython = path.join(venvPath, 'bin', 'python');
       const venvPip = path.join(venvPath, 'bin', 'pip');
 
+      // Check if venv exists, if not create it for python/pip commands
+      if (!fs.existsSync(venvPython) && (baseCommand === 'python' || baseCommand === 'python3' || baseCommand === 'pip' || baseCommand === 'pip3')) {
+        console.log(`Creating missing venv for ${panelId} via terminal command`);
+        await execAsync(`python3 -m venv "${venvPath}"`);
+      }
+
       if (fs.existsSync(venvPython)) {
         if (baseCommand === 'python' || baseCommand === 'python3') {
           execCommand = command.replace(/^python3?\b/, `"${venvPython}"`);
@@ -105,6 +111,7 @@ router.post('/:panelId/exec', async (req, res) => {
         }
       }
     } catch (e) {
+      console.error('Venv redirection error:', e.message);
       // If rewrite fails, fall back to the raw command
     }
 
