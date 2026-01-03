@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { vmApi, FileEntry } from '@/lib/vmApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import { CodeEditor } from './CodeEditor';
 import {
   Dialog,
   DialogContent,
@@ -706,12 +706,13 @@ export function FileManager({ panelId }: FileManagerProps) {
               </Button>
             </div>
           </DialogHeader>
-          <Textarea
-            className="flex-1 font-mono text-sm resize-none"
-            value={editContent}
-            onChange={(e) => setEditContent(e.target.value)}
-            placeholder="// Your code here..."
-          />
+          <div className="flex-1 min-h-0">
+            <CodeEditor
+              value={editContent}
+              onChange={setEditContent}
+              filename={editingFile?.name || ''}
+            />
+          </div>
         </DialogContent>
       </Dialog>
 

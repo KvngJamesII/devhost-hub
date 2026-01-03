@@ -14,6 +14,35 @@ export type Database = {
   }
   public: {
     Tables: {
+      code_redemptions: {
+        Row: {
+          code_id: string
+          id: string
+          redeemed_at: string
+          user_id: string
+        }
+        Insert: {
+          code_id: string
+          id?: string
+          redeemed_at?: string
+          user_id: string
+        }
+        Update: {
+          code_id?: string
+          id?: string
+          redeemed_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "code_redemptions_code_id_fkey"
+            columns: ["code_id"]
+            isOneToOne: false
+            referencedRelation: "redeem_codes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       panel_files: {
         Row: {
           content: string | null
@@ -157,6 +186,7 @@ export type Database = {
           email: string
           id: string
           is_banned: boolean
+          panels_limit: number
           premium_status: Database["public"]["Enums"]["premium_status"]
           updated_at: string
           username: string | null
@@ -167,6 +197,7 @@ export type Database = {
           email: string
           id: string
           is_banned?: boolean
+          panels_limit?: number
           premium_status?: Database["public"]["Enums"]["premium_status"]
           updated_at?: string
           username?: string | null
@@ -177,9 +208,46 @@ export type Database = {
           email?: string
           id?: string
           is_banned?: boolean
+          panels_limit?: number
           premium_status?: Database["public"]["Enums"]["premium_status"]
           updated_at?: string
           username?: string | null
+        }
+        Relationships: []
+      }
+      redeem_codes: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string
+          current_uses: number
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          max_uses: number | null
+          panels_granted: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by: string
+          current_uses?: number
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          panels_granted?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string
+          current_uses?: number
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          panels_granted?: number
         }
         Relationships: []
       }
