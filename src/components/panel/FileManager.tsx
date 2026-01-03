@@ -63,8 +63,38 @@ export function FileManager({ panelId }: FileManagerProps) {
   const [saving, setSaving] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  // Draft storage key generator
+  const getDraftKey = (filePath: string) => `draft_${panelId}_${filePath}`;
+
+  // Auto-save draft to localStorage
+  useEffect(() => {
+    if (editingFile && editContent) {
+      const draftKey = getDraftKey(editingFile.path);
+      const timeoutId = setTimeout(() => {
+        localStorage.setItem(draftKey, editContent);
+        localStorage.setItem(`${draftKey}_timestamp`, Date.now().toString());
+      }, 500); // Debounce 500ms
+      return () => clearTimeout(timeoutId);
+    }
+  }, [editContent, editingFile, panelId]);
+
+  // Clear draft after successful save
+  const clearDraft = (filePath: string) => {
+    const draftKey = getDraftKey(filePath);
+    localStorage.removeItem(draftKey);
+    localStorage.removeItem(`${draftKey}_timestamp`);
+    setHasDraft(false);
+  };
+
+  // Check for existing draft
+  const checkForDraft = (filePath: string): string | null => {
+    const draftKey = getDraftKey(filePath);
+    return localStorage.getItem(draftKey);
+  };
 
   useEffect(() => {
     fetchFiles();
@@ -294,15 +324,50 @@ export function FileManager({ panelId }: FileManagerProps) {
   const handleEdit = async (file: PanelFile) => {
     setEditingFile(file);
     setEditContent('');
+    setHasDraft(false);
     setShowEditDialog(true);
     
     try {
       const result = await vmApi.getFileContent(panelId, file.path);
-      setEditContent(result.content);
+      const savedDraft = checkForDraft(file.path);
+      
+      if (savedDraft && savedDraft !== result.content) {
+        // There's a draft that differs from the server content
+        setHasDraft(true);
+        setEditContent(savedDraft);
+        toast({
+          title: 'Draft Restored',
+          description: 'Your unsaved changes have been restored from draft',
+        });
+      } else {
+        setEditContent(result.content);
+        // Clear draft if it matches server content
+        if (savedDraft) clearDraft(file.path);
+      }
     } catch (error: any) {
       toast({
         title: 'Error',
         description: error.message || 'Failed to load file content',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDiscardDraft = async () => {
+    if (!editingFile) return;
+    clearDraft(editingFile.path);
+    
+    try {
+      const result = await vmApi.getFileContent(panelId, editingFile.path);
+      setEditContent(result.content);
+      toast({
+        title: 'Draft Discarded',
+        description: 'Original content restored',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: 'Failed to reload original content',
         variant: 'destructive',
       });
     }
@@ -314,6 +379,7 @@ export function FileManager({ panelId }: FileManagerProps) {
 
     try {
       await vmApi.syncFiles(panelId, [{ path: editingFile.path, content: editContent }]);
+      clearDraft(editingFile.path);
       toast({
         title: 'Saved',
         description: 'File saved successfully',
@@ -622,8 +688,18 @@ export function FileManager({ panelId }: FileManagerProps) {
             <DialogTitle className="flex items-center gap-2">
               <FileCode className="w-5 h-5" />
               {editingFile?.name}
+              {hasDraft && (
+                <span className="text-xs bg-warning/20 text-warning px-2 py-0.5 rounded font-normal">
+                  Draft
+                </span>
+              )}
             </DialogTitle>
             <div className="flex items-center gap-2">
+              {hasDraft && (
+                <Button size="sm" variant="outline" onClick={handleDiscardDraft}>
+                  Discard Draft
+                </Button>
+              )}
               <Button size="sm" onClick={handleSave} disabled={saving}>
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
                 Save
