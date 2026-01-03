@@ -28,6 +28,7 @@ import {
 import { FileManager } from '@/components/panel/FileManager';
 import { LogsViewer } from '@/components/panel/LogsViewer';
 import { UnifiedConsole } from '@/components/panel/UnifiedConsole';
+import { StartupSettings } from '@/components/panel/StartupSettings';
 import { PanelSettings } from '@/components/panel/PanelSettings';
 import {
   AlertDialog,
@@ -46,6 +47,7 @@ interface Panel {
   language: 'nodejs' | 'python';
   status: 'stopped' | 'running' | 'deploying' | 'error';
   created_at: string;
+  entry_point?: string | null;
 }
 
 const PanelPage = () => {
@@ -139,16 +141,32 @@ const PanelPage = () => {
       await supabase.from('panels').update({ status: 'deploying' }).eq('id', id);
       setPanel({ ...panel, status: 'deploying' });
       
+      // Log deployment start
+      await supabase.from('panel_logs').insert({
+        panel_id: id,
+        message: 'Starting deployment...',
+        log_type: 'info',
+      });
+      
       // First deploy (setup directory, install deps)
       await vmApi.deploy(id, panel.language);
       
-      // Then start the PM2 process
-      const result = await vmApi.start(id, panel.language);
+      await supabase.from('panel_logs').insert({
+        panel_id: id,
+        message: 'Dependencies installed, starting application...',
+        log_type: 'info',
+      });
+      
+      // Get the entry point (use custom or default)
+      const entryPoint = panel.entry_point || (panel.language === 'python' ? 'main.py' : 'index.js');
+      
+      // Then start the PM2 process with entry point
+      const result = await vmApi.start(id, panel.language, entryPoint);
       
       await supabase.from('panels').update({ status: 'running' }).eq('id', id);
       await supabase.from('panel_logs').insert({
         panel_id: id,
-        message: `Panel started on port ${result.port}`,
+        message: `Panel started successfully on port ${result.port} (entry: ${entryPoint})`,
         log_type: 'success',
       });
       
@@ -159,11 +177,19 @@ const PanelPage = () => {
       });
       fetchVmStatus();
     } catch (error: any) {
+      const errorMessage = error.message || 'Failed to start panel';
+      
       await supabase.from('panels').update({ status: 'error' }).eq('id', id);
+      await supabase.from('panel_logs').insert({
+        panel_id: id,
+        message: `Startup failed: ${errorMessage}`,
+        log_type: 'error',
+      });
+      
       setPanel({ ...panel, status: 'error' });
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to start panel',
+        title: 'Startup Failed',
+        description: errorMessage,
         variant: 'destructive',
       });
     }
@@ -436,6 +462,13 @@ const PanelPage = () => {
             <span className="hidden sm:inline">Logs</span>
           </TabsTrigger>
           <TabsTrigger
+            value="startup"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-3 sm:px-4 py-3"
+          >
+            <Play className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Startup</span>
+          </TabsTrigger>
+          <TabsTrigger
             value="settings"
             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-3 sm:px-4 py-3"
           >
@@ -456,7 +489,11 @@ const PanelPage = () => {
           <LogsViewer panelId={panel.id} />
         </TabsContent>
 
-        <TabsContent value="settings" className="flex-1 m-0">
+        <TabsContent value="startup" className="flex-1 m-0 overflow-y-auto">
+          <StartupSettings panel={panel} onUpdate={fetchPanel} />
+        </TabsContent>
+
+        <TabsContent value="settings" className="flex-1 m-0 overflow-y-auto">
           <PanelSettings panel={panel} onUpdate={fetchPanel} />
         </TabsContent>
       </Tabs>
