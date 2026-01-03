@@ -9,6 +9,7 @@ interface Profile {
   premium_status: 'none' | 'pending' | 'approved' | 'rejected';
   is_banned: boolean;
   ban_reason: string | null;
+  panels_limit: number;
 }
 
 interface AuthContextType {
