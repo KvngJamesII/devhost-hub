@@ -22,9 +22,18 @@ import {
   ChevronRight,
   Gift,
   Ticket,
+  ShoppingCart,
+  ExternalLink,
 } from 'lucide-react';
 import { CreatePanelDialog } from '@/components/CreatePanelDialog';
 import { RequestPremiumDialog } from '@/components/RequestPremiumDialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 interface Panel {
   id: string;
@@ -42,6 +51,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showPremiumDialog, setShowPremiumDialog] = useState(false);
+  const [showBuyDialog, setShowBuyDialog] = useState(false);
   const [redeemCode, setRedeemCode] = useState('');
   const [redeeming, setRedeeming] = useState(false);
   const navigate = useNavigate();
@@ -337,6 +347,29 @@ const Dashboard = () => {
           </div>
         )}
 
+        {/* Buy Redeem Code */}
+        <div className="rounded-xl border border-warning/30 bg-warning/5 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-warning/20 flex items-center justify-center">
+                <ShoppingCart className="w-5 h-5 text-warning" />
+              </div>
+              <div>
+                <p className="font-mono font-semibold text-foreground">Buy Redeem Code</p>
+                <p className="text-xs text-muted-foreground">Purchase panel slots directly</p>
+              </div>
+            </div>
+            <Button 
+              size="sm"
+              variant="outline"
+              onClick={() => setShowBuyDialog(true)}
+              className="font-mono border-warning/30 hover:bg-warning/10"
+            >
+              Buy Now
+            </Button>
+          </div>
+        </div>
+
         {/* Panels Section */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -467,6 +500,37 @@ const Dashboard = () => {
         open={showPremiumDialog}
         onOpenChange={setShowPremiumDialog}
       />
+
+      {/* Buy Redeem Code Dialog */}
+      <Dialog open={showBuyDialog} onOpenChange={setShowBuyDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5 text-warning" />
+              Buy Redeem Code
+            </DialogTitle>
+            <DialogDescription>
+              Contact admin to purchase panel slots
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="bg-muted/50 rounded-lg p-4 text-center">
+              <p className="text-2xl font-mono font-bold text-warning">$1</p>
+              <p className="text-sm text-muted-foreground">Per Panel / 1 Month</p>
+            </div>
+            <div className="text-sm text-muted-foreground text-center">
+              <p>Get instant access to premium hosting by purchasing a redeem code from the admin.</p>
+            </div>
+            <Button 
+              className="w-full font-mono bg-primary hover:bg-primary/90"
+              onClick={() => window.open('https://t.me/theidledeveloper', '_blank')}
+            >
+              <ExternalLink className="w-4 h-4 mr-2" />
+              Contact Admin on Telegram
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
