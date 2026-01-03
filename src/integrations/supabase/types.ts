@@ -120,6 +120,7 @@ export type Database = {
         Row: {
           created_at: string
           droplet_id: string | null
+          entry_point: string | null
           id: string
           language: Database["public"]["Enums"]["panel_language"]
           name: string
@@ -130,6 +131,7 @@ export type Database = {
         Insert: {
           created_at?: string
           droplet_id?: string | null
+          entry_point?: string | null
           id?: string
           language: Database["public"]["Enums"]["panel_language"]
           name: string
@@ -140,6 +142,7 @@ export type Database = {
         Update: {
           created_at?: string
           droplet_id?: string | null
+          entry_point?: string | null
           id?: string
           language?: Database["public"]["Enums"]["panel_language"]
           name?: string
