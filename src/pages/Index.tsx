@@ -65,6 +65,14 @@ const Index = () => {
                   # Node.js & Python hosting
                 </span>
               </h1>
+
+              {/* Pricing Highlight */}
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-warning/30 bg-warning/10">
+                <Zap className="w-5 h-5 text-warning" />
+                <span className="font-mono font-bold text-warning">
+                  Host Node.js/Python apps for as low as $1/month
+                </span>
+              </div>
               
               <p className="text-lg text-muted-foreground max-w-lg">
                 Ship your backend in seconds. Upload code, click run, watch it scale.

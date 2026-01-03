@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import {
   Server,
@@ -19,6 +20,8 @@ import {
   Activity,
   Zap,
   ChevronRight,
+  Gift,
+  Ticket,
 } from 'lucide-react';
 import { CreatePanelDialog } from '@/components/CreatePanelDialog';
 import { RequestPremiumDialog } from '@/components/RequestPremiumDialog';
@@ -39,6 +42,8 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showPremiumDialog, setShowPremiumDialog] = useState(false);
+  const [redeemCode, setRedeemCode] = useState('');
+  const [redeeming, setRedeeming] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -76,6 +81,87 @@ const Dashboard = () => {
   const handleSignOut = async () => {
     await signOut();
     navigate('/');
+  };
+
+  const handleRedeemCode = async () => {
+    if (!redeemCode.trim() || !user) return;
+    setRedeeming(true);
+
+    try {
+      // Find the code
+      const { data: codeData, error: codeError } = await supabase
+        .from('redeem_codes')
+        .select('*')
+        .eq('code', redeemCode.trim().toUpperCase())
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (codeError || !codeData) {
+        toast({ title: 'Invalid Code', description: 'This code does not exist or is inactive', variant: 'destructive' });
+        setRedeeming(false);
+        return;
+      }
+
+      // Check if max uses reached
+      if (codeData.max_uses !== null && codeData.current_uses >= codeData.max_uses) {
+        toast({ title: 'Code Expired', description: 'This code has reached its maximum uses', variant: 'destructive' });
+        setRedeeming(false);
+        return;
+      }
+
+      // Check if user already redeemed this code
+      const { data: existingRedemption } = await supabase
+        .from('code_redemptions')
+        .select('id')
+        .eq('code_id', codeData.id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (existingRedemption) {
+        toast({ title: 'Already Redeemed', description: 'You have already used this code', variant: 'destructive' });
+        setRedeeming(false);
+        return;
+      }
+
+      // Redeem the code - create redemption record
+      const { error: redemptionError } = await supabase
+        .from('code_redemptions')
+        .insert({ code_id: codeData.id, user_id: user.id });
+
+      if (redemptionError) {
+        toast({ title: 'Error', description: 'Failed to redeem code', variant: 'destructive' });
+        setRedeeming(false);
+        return;
+      }
+
+      // Update code usage count
+      await supabase
+        .from('redeem_codes')
+        .update({ current_uses: codeData.current_uses + 1 })
+        .eq('id', codeData.id);
+
+      // Update user profile with premium and panels
+      const currentLimit = profile?.panels_limit || 0;
+      await supabase
+        .from('profiles')
+        .update({ 
+          premium_status: 'approved',
+          panels_limit: currentLimit + codeData.panels_granted 
+        })
+        .eq('id', user.id);
+
+      toast({ 
+        title: 'Code Redeemed!', 
+        description: `You received ${codeData.panels_granted} panel slot(s) and premium access!` 
+      });
+      setRedeemCode('');
+      
+      // Refresh page to update profile
+      window.location.reload();
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+    setRedeeming(false);
   };
 
   const getStatusInfo = (status: string) => {
@@ -187,34 +273,66 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Premium Banner */}
+        {/* Premium Banner or Redeem Code */}
         {!isPremium && (
-          <div className="relative overflow-hidden rounded-xl border border-primary/30 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 p-4">
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(34,197,94,0.03)_50%,transparent_100%)] animate-pulse" />
-            <div className="relative flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                  <Crown className="w-5 h-5 text-primary" />
+          <div className="space-y-3">
+            {/* Request Premium */}
+            <div className="relative overflow-hidden rounded-xl border border-primary/30 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 p-4">
+              <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(34,197,94,0.03)_50%,transparent_100%)] animate-pulse" />
+              <div className="relative flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                    <Crown className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-mono font-semibold text-foreground">Upgrade to Premium</p>
+                    <p className="text-xs text-muted-foreground">Unlock panel hosting capabilities</p>
+                  </div>
+                </div>
+                {profile?.premium_status === 'pending' ? (
+                  <Badge variant="secondary" className="font-mono">
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    PENDING
+                  </Badge>
+                ) : (
+                  <Button 
+                    size="sm" 
+                    onClick={() => setShowPremiumDialog(true)}
+                    className="font-mono bg-primary hover:bg-primary/90"
+                  >
+                    Request
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Redeem Code Input */}
+            <div className="rounded-xl border border-accent/30 bg-accent/5 p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center">
+                  <Ticket className="w-5 h-5 text-accent" />
                 </div>
                 <div>
-                  <p className="font-mono font-semibold text-foreground">Upgrade to Premium</p>
-                  <p className="text-xs text-muted-foreground">Unlock panel hosting capabilities</p>
+                  <p className="font-mono font-semibold text-foreground">Have a Redeem Code?</p>
+                  <p className="text-xs text-muted-foreground">Enter your code to get instant access</p>
                 </div>
               </div>
-              {profile?.premium_status === 'pending' ? (
-                <Badge variant="secondary" className="font-mono">
-                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                  PENDING
-                </Badge>
-              ) : (
+              <div className="flex gap-2">
+                <Input
+                  placeholder="IDEV-XXX-XXX"
+                  value={redeemCode}
+                  onChange={(e) => setRedeemCode(e.target.value.toUpperCase())}
+                  className="font-mono text-sm uppercase"
+                  onKeyDown={(e) => e.key === 'Enter' && handleRedeemCode()}
+                />
                 <Button 
-                  size="sm" 
-                  onClick={() => setShowPremiumDialog(true)}
-                  className="font-mono bg-primary hover:bg-primary/90"
+                  onClick={handleRedeemCode}
+                  disabled={redeeming || !redeemCode.trim()}
+                  className="bg-accent hover:bg-accent/90"
                 >
-                  Request
+                  {redeeming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Gift className="w-4 h-4" />}
                 </Button>
-              )}
+              </div>
             </div>
           </div>
         )}
