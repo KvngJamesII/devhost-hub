@@ -3,7 +3,7 @@ import { vmApi, FileEntry } from '@/lib/vmApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { CodeEditor } from './CodeEditor';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -706,13 +706,12 @@ export function FileManager({ panelId }: FileManagerProps) {
               </Button>
             </div>
           </DialogHeader>
-          <div className="flex-1 min-h-0">
-            <CodeEditor
-              value={editContent}
-              onChange={setEditContent}
-              filename={editingFile?.name || ''}
-            />
-          </div>
+          <Textarea
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            className="flex-1 min-h-0 h-full font-mono text-sm resize-none bg-muted/50"
+            placeholder="File content..."
+          />
         </DialogContent>
       </Dialog>
 
