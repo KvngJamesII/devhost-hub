@@ -23,8 +23,16 @@ router.get('/:panelId/status', async (req, res) => {
     const exists = fs.existsSync(appDir);
 
     // Calculate uptime as duration (ms since started)
+    // pm_uptime is the timestamp when the process started
     const pmUptime = proc?.pm2_env?.pm_uptime;
-    const uptime = pmUptime ? Date.now() - pmUptime : 0;
+    let uptime = 0;
+    if (pmUptime && typeof pmUptime === 'number' && pmUptime > 0) {
+      const now = Date.now();
+      // Validate pm_uptime is a reasonable timestamp (after year 2020)
+      if (pmUptime > 1577836800000 && pmUptime < now) {
+        uptime = now - pmUptime;
+      }
+    }
 
     res.json({
       panelId,
