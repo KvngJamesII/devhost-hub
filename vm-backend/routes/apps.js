@@ -18,19 +18,24 @@ router.get('/:panelId/status', async (req, res) => {
     const processName = `panel-${panelId}`;
     const appDir = path.join(APPS_DIR, panelId);
     
-    const process = await pm2Manager.getProcess(processName);
+    const proc = await pm2Manager.getProcess(processName);
     const port = portManager.getPort(panelId);
     const exists = fs.existsSync(appDir);
+
+    // Calculate uptime as duration (ms since started)
+    const pmUptime = proc?.pm2_env?.pm_uptime;
+    const uptime = pmUptime ? Date.now() - pmUptime : 0;
 
     res.json({
       panelId,
       exists,
       port,
-      status: process ? process.pm2_env?.status : 'stopped',
-      pid: process?.pid,
-      memory: process?.monit?.memory,
-      cpu: process?.monit?.cpu,
-      uptime: process?.pm2_env?.pm_uptime
+      status: proc ? proc.pm2_env?.status : 'stopped',
+      pid: proc?.pid,
+      memory: proc?.monit?.memory,
+      cpu: proc?.monit?.cpu,
+      uptime: uptime,
+      restarts: proc?.pm2_env?.restart_time || 0
     });
   } catch (error) {
     console.error('Status error:', error);

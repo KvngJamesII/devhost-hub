@@ -93,9 +93,9 @@ export function ConsoleView({ panelId, panelStatus }: ConsoleViewProps) {
   ];
 
   return (
-    <div className="h-full flex flex-col bg-black/95">
+    <div className="h-[calc(100vh-280px)] flex flex-col bg-black/95">
       {/* Toolbar */}
-      <div className="p-3 border-b border-border/50 flex items-center justify-between bg-card/50">
+      <div className="flex-shrink-0 p-3 border-b border-border/50 flex items-center justify-between bg-card/50">
         <div className="flex items-center gap-3">
           <Monitor className="w-4 h-4 text-primary" />
           <span className="text-sm font-medium">Console Output</span>
@@ -133,8 +133,8 @@ export function ConsoleView({ panelId, panelStatus }: ConsoleViewProps) {
         </div>
       </div>
 
-      {/* Console Output */}
-      <div className="flex-1 overflow-auto p-4 font-mono text-sm">
+      {/* Console Output - Scrollable */}
+      <div className="flex-1 overflow-y-auto p-4 font-mono text-sm min-h-0">
         {panelStatus !== 'running' ? (
           <div className="text-center py-12 text-muted-foreground">
             <Monitor className="w-12 h-12 mx-auto mb-3 opacity-30" />
