@@ -64,6 +64,7 @@ export function FileManager({ panelId }: FileManagerProps) {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
+  const [loadingFileId, setLoadingFileId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -322,10 +323,10 @@ export function FileManager({ panelId }: FileManagerProps) {
   };
 
   const handleEdit = async (file: PanelFile) => {
+    setLoadingFileId(file.path);
     setEditingFile(file);
     setEditContent('');
     setHasDraft(false);
-    setShowEditDialog(true);
     
     try {
       const result = await vmApi.getFileContent(panelId, file.path);
@@ -344,12 +345,15 @@ export function FileManager({ panelId }: FileManagerProps) {
         // Clear draft if it matches server content
         if (savedDraft) clearDraft(file.path);
       }
+      setShowEditDialog(true);
     } catch (error: any) {
       toast({
         title: 'Error',
         description: error.message || 'Failed to load file content',
         variant: 'destructive',
       });
+    } finally {
+      setLoadingFileId(null);
     }
   };
 
@@ -612,8 +616,15 @@ export function FileManager({ panelId }: FileManagerProps) {
                   onClick={() =>
                     file.type === 'directory' ? navigateToFolder(file) : handleEdit(file)
                   }
+                  disabled={loadingFileId === file.path}
                 >
-                  <span className="flex-shrink-0">{getFileIcon(file)}</span>
+                  <span className="flex-shrink-0">
+                    {loadingFileId === file.path ? (
+                      <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                    ) : (
+                      getFileIcon(file)
+                    )}
+                  </span>
                   <span className="truncate text-sm">{file.name}</span>
                   {file.size !== null && file.type === 'file' && (
                     <span className="text-xs text-muted-foreground ml-auto mr-1 hidden sm:block">
