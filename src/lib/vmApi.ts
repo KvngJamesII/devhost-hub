@@ -30,8 +30,8 @@ export interface ExecResult {
 export interface LogsResult {
   panelId: string;
   logs: {
-    out: string[];
-    err: string[];
+    out: string;
+    err: string;
   };
 }
 
