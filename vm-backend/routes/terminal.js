@@ -62,16 +62,16 @@ router.post('/:panelId/exec', async (req, res) => {
 
     // Extract base command for validation
     const baseCommand = command.trim().split(/\s+/)[0];
-    
-    // Security check
+
+    // Security check (validate the *user command*, not any internal rewrites)
     if (!ALLOWED_COMMANDS.includes(baseCommand)) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: `Command '${baseCommand}' not allowed`,
-        allowed: ALLOWED_COMMANDS 
+        allowed: ALLOWED_COMMANDS
       });
     }
 
-    // Block dangerous patterns
+    // Block dangerous patterns (check the raw command the user typed)
     const dangerousPatterns = [
       /;\s*(rm\s+-rf\s+\/|dd|mkfs|:|>|>>)/i,
       /\|\s*(rm|dd|bash|sh|zsh)/i,
@@ -89,8 +89,27 @@ router.post('/:panelId/exec', async (req, res) => {
       }
     }
 
+    // If a panel venv exists, route python/pip through it to avoid PEP 668
+    // (so "pip install ..." installs into ./venv, not system Python)
+    let execCommand = command;
+    try {
+      const venvPath = path.join(appDir, 'venv');
+      const venvPython = path.join(venvPath, 'bin', 'python');
+      const venvPip = path.join(venvPath, 'bin', 'pip');
+
+      if (fs.existsSync(venvPython)) {
+        if (baseCommand === 'python' || baseCommand === 'python3') {
+          execCommand = command.replace(/^python3?\b/, `"${venvPython}"`);
+        } else if (baseCommand === 'pip' || baseCommand === 'pip3') {
+          execCommand = command.replace(/^pip3?\b/, `"${venvPip}"`);
+        }
+      }
+    } catch (e) {
+      // If rewrite fails, fall back to the raw command
+    }
+
     // Execute command
-    const { stdout, stderr } = await execAsync(command, {
+    const { stdout, stderr } = await execAsync(execCommand, {
       cwd: appDir,
       timeout: 30000, // 30 second timeout
       maxBuffer: 1024 * 1024 // 1MB buffer
