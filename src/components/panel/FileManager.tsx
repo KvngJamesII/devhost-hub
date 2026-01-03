@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { vmApi, FileEntry } from '@/lib/vmApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -21,7 +20,6 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Folder,
   File,
-  Plus,
   Upload,
   MoreVertical,
   Trash2,
@@ -30,9 +28,11 @@ import {
   Loader2,
   FolderPlus,
   FilePlus,
-  X,
   Save,
   RefreshCw,
+  Download,
+  Archive,
+  CheckSquare,
 } from 'lucide-react';
 
 interface PanelFile {
@@ -58,12 +58,19 @@ export function FileManager({ panelId }: FileManagerProps) {
   const [editingFile, setEditingFile] = useState<PanelFile | null>(null);
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchFiles();
   }, [panelId, currentPath]);
+
+  // Clear selection when changing directory
+  useEffect(() => {
+    setSelectedFiles(new Set());
+  }, [currentPath]);
 
   const fetchFiles = async () => {
     setLoading(true);
@@ -84,10 +91,121 @@ export function FileManager({ panelId }: FileManagerProps) {
       setFiles(mappedFiles);
     } catch (error: any) {
       console.error('Failed to load files:', error);
-      // If directory doesn't exist yet, show empty
       setFiles([]);
     }
     setLoading(false);
+  };
+
+  const toggleSelect = (path: string) => {
+    setSelectedFiles(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(path)) {
+        newSet.delete(path);
+      } else {
+        newSet.add(path);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedFiles.size === files.length) {
+      setSelectedFiles(new Set());
+    } else {
+      setSelectedFiles(new Set(files.map(f => f.path)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedFiles.size === 0) return;
+    setBulkLoading(true);
+    
+    try {
+      await Promise.all(
+        Array.from(selectedFiles).map(path => vmApi.deleteFile(panelId, path))
+      );
+      toast({
+        title: 'Deleted',
+        description: `${selectedFiles.size} item(s) deleted`,
+      });
+      setSelectedFiles(new Set());
+      fetchFiles();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete some files',
+        variant: 'destructive',
+      });
+    }
+    setBulkLoading(false);
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedFiles.size === 0) return;
+    setBulkLoading(true);
+
+    try {
+      const filesToDownload = files.filter(f => selectedFiles.has(f.path) && f.type === 'file');
+      
+      for (const file of filesToDownload) {
+        const result = await vmApi.getFileContent(panelId, file.path);
+        const blob = new Blob([result.content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+      
+      toast({
+        title: 'Downloaded',
+        description: `${filesToDownload.length} file(s) downloaded`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to download files',
+        variant: 'destructive',
+      });
+    }
+    setBulkLoading(false);
+  };
+
+  const handleBulkArchive = async () => {
+    if (selectedFiles.size === 0) return;
+    setBulkLoading(true);
+
+    try {
+      const archivePath = currentPath ? `${currentPath}/archive` : 'archive';
+      await vmApi.createDirectory(panelId, archivePath);
+      
+      const filesToArchive = files.filter(f => selectedFiles.has(f.path));
+      
+      for (const file of filesToArchive) {
+        if (file.type === 'file') {
+          const result = await vmApi.getFileContent(panelId, file.path);
+          await vmApi.syncFiles(panelId, [{ path: `${archivePath}/${file.name}`, content: result.content }]);
+          await vmApi.deleteFile(panelId, file.path);
+        }
+      }
+      
+      toast({
+        title: 'Archived',
+        description: `${filesToArchive.length} item(s) moved to archive folder`,
+      });
+      setSelectedFiles(new Set());
+      fetchFiles();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to archive files',
+        variant: 'destructive',
+      });
+    }
+    setBulkLoading(false);
   };
 
   const handleCreate = async () => {
@@ -230,10 +348,13 @@ export function FileManager({ panelId }: FileManagerProps) {
     return <File className="w-5 h-5 text-muted-foreground" />;
   };
 
+  const isAllSelected = files.length > 0 && selectedFiles.size === files.length;
+  const hasSelection = selectedFiles.size > 0;
+
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-[calc(100vh-280px)] flex flex-col">
       {/* Toolbar */}
-      <div className="p-3 border-b border-border flex items-center justify-between gap-2">
+      <div className="flex-shrink-0 p-3 border-b border-border flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 overflow-x-auto">
           <Button variant="ghost" size="sm" onClick={navigateUp} disabled={!currentPath}>
             ..
@@ -277,8 +398,52 @@ export function FileManager({ panelId }: FileManagerProps) {
         </div>
       </div>
 
+      {/* Bulk Actions Bar */}
+      {hasSelection && (
+        <div className="flex-shrink-0 p-2 border-b border-border bg-muted/50 flex items-center gap-2">
+          <span className="text-sm text-muted-foreground ml-2">
+            {selectedFiles.size} selected
+          </span>
+          <div className="flex-1" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleBulkDownload}
+            disabled={bulkLoading}
+          >
+            <Download className="w-4 h-4 mr-1" />
+            Download
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleBulkArchive}
+            disabled={bulkLoading}
+          >
+            <Archive className="w-4 h-4 mr-1" />
+            Archive
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleBulkDelete}
+            disabled={bulkLoading}
+            className="text-destructive hover:text-destructive"
+          >
+            {bulkLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <Trash2 className="w-4 h-4 mr-1" />
+                Delete
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
       {/* File List */}
-      <div className="flex-1 overflow-auto p-3">
+      <div className="flex-1 overflow-y-auto p-3 min-h-0">
         {loading ? (
           <div className="flex items-center justify-center h-32">
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -291,11 +456,32 @@ export function FileManager({ panelId }: FileManagerProps) {
           </div>
         ) : (
           <div className="space-y-1">
+            {/* Select All Row */}
+            <div className="flex items-center gap-3 p-2 border-b border-border/50 mb-2">
+              <Checkbox
+                checked={isAllSelected}
+                onCheckedChange={toggleSelectAll}
+                className="data-[state=checked]:bg-primary"
+              />
+              <span className="text-sm text-muted-foreground flex items-center gap-1">
+                <CheckSquare className="w-4 h-4" />
+                Select All
+              </span>
+            </div>
+            
             {files.map((file) => (
               <div
                 key={file.path}
-                className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors group"
+                className={`flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors group ${
+                  selectedFiles.has(file.path) ? 'bg-muted/30' : ''
+                }`}
               >
+                <Checkbox
+                  checked={selectedFiles.has(file.path)}
+                  onCheckedChange={() => toggleSelect(file.path)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="data-[state=checked]:bg-primary"
+                />
                 <button
                   className="flex items-center gap-3 flex-1 text-left"
                   onClick={() =>
