@@ -190,7 +190,7 @@ router.post('/:panelId/start', async (req, res) => {
         }
       }
 
-      script = `./venv/bin/python ${entryFile}`;
+      script = `${venvPython} ${entryFile}`;
     } else {
       return res.status(400).json({ error: 'Invalid language' });
     }
