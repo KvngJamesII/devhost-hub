@@ -219,12 +219,58 @@ router.post('/:panelId/restart', async (req, res) => {
   try {
     const { panelId } = req.params;
     const processName = `panel-${panelId}`;
+    const appDir = path.join(APPS_DIR, panelId);
+
+    if (!fs.existsSync(appDir)) {
+      return res.status(404).json({ error: 'App directory not found' });
+    }
+
+    // Before restarting, ensure dependencies are installed (common after file edits)
+    const packageJsonPath = path.join(appDir, 'package.json');
+    if (fs.existsSync(packageJsonPath)) {
+      console.log(`Installing/updating npm dependencies for ${panelId} (restart)`);
+      try {
+        await execAsync(`cd "${appDir}" && npm install`, { timeout: 120000 });
+      } catch (npmErr) {
+        console.error(`npm install failed for ${panelId} (restart):`, npmErr.message);
+        return res.status(500).json({ error: `Failed to install Node.js dependencies: ${npmErr.message}` });
+      }
+    }
+
+    const requirementsPath = path.join(appDir, 'requirements.txt');
+    if (fs.existsSync(requirementsPath)) {
+      const venvPath = path.join(appDir, 'venv');
+      const venvPython = path.join(venvPath, 'bin', 'python');
+      const venvPip = path.join(venvPath, 'bin', 'pip');
+
+      if (!fs.existsSync(venvPython)) {
+        console.log(`Creating venv for ${panelId} (restart; missing or corrupted)`);
+        if (fs.existsSync(venvPath)) {
+          await execAsync(`rm -rf "${venvPath}"`);
+        }
+        try {
+          await execAsync(`cd "${appDir}" && python3 -m venv venv`, { timeout: 60000 });
+        } catch (venvErr) {
+          console.error(`venv creation failed for ${panelId} (restart):`, venvErr.message);
+          return res.status(500).json({ error: `Failed to create virtual environment: ${venvErr.message}` });
+        }
+      }
+
+      console.log(`Installing pip dependencies for ${panelId} (restart)`);
+      try {
+        await execAsync(`cd "${appDir}" && "${venvPip}" install --upgrade pip`, { timeout: 60000 });
+        await execAsync(`cd "${appDir}" && "${venvPip}" install -r requirements.txt`, { timeout: 300000 });
+      } catch (pipErr) {
+        console.error(`pip install failed for ${panelId} (restart):`, pipErr.message);
+        return res.status(500).json({ error: `Failed to install Python dependencies: ${pipErr.message}` });
+      }
+    }
 
     await pm2Manager.restart(processName);
     const port = portManager.getPort(panelId);
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       panelId,
       port,
       message: 'App restarted successfully'
