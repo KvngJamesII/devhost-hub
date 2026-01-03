@@ -119,12 +119,16 @@ const PanelPage = () => {
       await supabase.from('panels').update({ status: 'deploying' }).eq('id', id);
       setPanel({ ...panel, status: 'deploying' });
       
-      const result = await vmApi.deploy(id, panel.language);
+      // First deploy (setup directory, install deps)
+      await vmApi.deploy(id, panel.language);
+      
+      // Then start the PM2 process
+      const result = await vmApi.start(id, panel.language);
       
       await supabase.from('panels').update({ status: 'running' }).eq('id', id);
       await supabase.from('panel_logs').insert({
         panel_id: id,
-        message: `Panel deployed on port ${result.port}`,
+        message: `Panel started on port ${result.port}`,
         log_type: 'success',
       });
       
