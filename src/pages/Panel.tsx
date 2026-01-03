@@ -27,8 +27,7 @@ import {
 } from 'lucide-react';
 import { FileManager } from '@/components/panel/FileManager';
 import { LogsViewer } from '@/components/panel/LogsViewer';
-import { TerminalView } from '@/components/panel/TerminalView';
-import { ConsoleView } from '@/components/panel/ConsoleView';
+import { UnifiedConsole } from '@/components/panel/UnifiedConsole';
 import { PanelSettings } from '@/components/panel/PanelSettings';
 import {
   AlertDialog,
@@ -278,6 +277,9 @@ const PanelPage = () => {
   if (!panel) return null;
 
   const formatUptime = (ms: number): string => {
+    // Sanity check - if uptime is negative or unreasonably large (> 1 year), show 0
+    if (ms <= 0 || ms > 365 * 24 * 60 * 60 * 1000) return '0s';
+    
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
@@ -411,46 +413,39 @@ const PanelPage = () => {
 
       {/* Main Content */}
       <Tabs defaultValue="console" className="flex-1 flex flex-col">
-        <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent h-auto p-0">
+        <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent h-auto p-0 overflow-x-auto">
           <TabsTrigger
             value="console"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-3 sm:px-4 py-3"
           >
-            <Terminal className="w-4 h-4 mr-2" />
-            Console
+            <Terminal className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Console</span>
           </TabsTrigger>
           <TabsTrigger
             value="files"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-3 sm:px-4 py-3"
           >
-            <FolderOpen className="w-4 h-4 mr-2" />
-            Files
+            <FolderOpen className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Files</span>
           </TabsTrigger>
           <TabsTrigger
             value="logs"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-3 sm:px-4 py-3"
           >
-            <FileText className="w-4 h-4 mr-2" />
-            Logs
-          </TabsTrigger>
-          <TabsTrigger
-            value="terminal"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3"
-          >
-            <Settings className="w-4 h-4 mr-2" />
-            Shell
+            <FileText className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Logs</span>
           </TabsTrigger>
           <TabsTrigger
             value="settings"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-3 sm:px-4 py-3"
           >
-            <Settings className="w-4 h-4 mr-2" />
-            Settings
+            <Settings className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Settings</span>
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="console" className="flex-1 m-0">
-          <ConsoleView panelId={panel.id} panelStatus={effectiveStatus} />
+          <UnifiedConsole panelId={panel.id} panelStatus={effectiveStatus} />
         </TabsContent>
 
         <TabsContent value="files" className="flex-1 m-0">
@@ -459,10 +454,6 @@ const PanelPage = () => {
 
         <TabsContent value="logs" className="flex-1 m-0">
           <LogsViewer panelId={panel.id} />
-        </TabsContent>
-
-        <TabsContent value="terminal" className="flex-1 m-0">
-          <TerminalView panelId={panel.id} panelStatus={effectiveStatus} />
         </TabsContent>
 
         <TabsContent value="settings" className="flex-1 m-0">
