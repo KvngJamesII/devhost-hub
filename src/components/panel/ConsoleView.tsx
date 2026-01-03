@@ -21,7 +21,10 @@ export function ConsoleView({ panelId, panelStatus }: ConsoleViewProps) {
     setLoading(true);
     try {
       const result = await vmApi.getLogs(panelId, 200);
-      setLogs(result.logs);
+      // Logs come as strings from PM2, split into lines
+      const outLines = result.logs?.out ? result.logs.out.split('\n').filter(Boolean) : [];
+      const errLines = result.logs?.err ? result.logs.err.split('\n').filter(Boolean) : [];
+      setLogs({ out: outLines, err: errLines });
     } catch (error) {
       console.error('Failed to fetch logs:', error);
     }
