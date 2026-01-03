@@ -57,6 +57,7 @@ const PanelPage = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [liveUptime, setLiveUptime] = useState<number>(0);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -116,6 +117,19 @@ const PanelPage = () => {
       return () => clearInterval(interval);
     }
   }, [panel?.id]);
+
+  // Live uptime counter - updates every minute
+  useEffect(() => {
+    if (vmStatus?.uptime && vmStatus?.status === 'running') {
+      setLiveUptime(vmStatus.uptime);
+      const interval = setInterval(() => {
+        setLiveUptime(prev => prev + 60000);
+      }, 60000);
+      return () => clearInterval(interval);
+    } else {
+      setLiveUptime(0);
+    }
+  }, [vmStatus?.uptime, vmStatus?.status]);
 
   const handleStart = async () => {
     if (!id || !panel) return;
@@ -382,7 +396,7 @@ const PanelPage = () => {
               <Clock className="w-4 h-4 text-primary mb-1" />
               <span className="text-xs text-muted-foreground">Uptime</span>
               <span className="text-sm font-semibold">
-                {vmStatus.uptime ? formatUptime(vmStatus.uptime) : '0s'}
+                {formatUptime(liveUptime)}
               </span>
             </div>
             <div className="flex flex-col items-center p-2 rounded-lg bg-muted/50">
