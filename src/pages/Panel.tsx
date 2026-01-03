@@ -57,6 +57,7 @@ const PanelPage = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showStopDialog, setShowStopDialog] = useState(false);
   const [liveUptime, setLiveUptime] = useState<number>(0);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -358,9 +359,9 @@ const PanelPage = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={handleStop}
+            onClick={() => setShowStopDialog(true)}
             disabled={actionLoading || effectiveStatus !== 'running'}
-            className="flex-1"
+            className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10 hover:border-destructive"
           >
             <Square className="w-4 h-4 mr-1" />
             Stop
@@ -468,6 +469,30 @@ const PanelPage = () => {
           <PanelSettings panel={panel} onUpdate={fetchPanel} />
         </TabsContent>
       </Tabs>
+
+      {/* Stop Confirmation */}
+      <AlertDialog open={showStopDialog} onOpenChange={setShowStopDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Stop Panel?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will stop "{panel.name}". You can restart it anytime.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowStopDialog(false);
+                handleStop();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Stop
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Confirmation */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

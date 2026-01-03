@@ -354,17 +354,20 @@ export function FileManager({ panelId }: FileManagerProps) {
   return (
     <div className="h-[calc(100vh-280px)] flex flex-col">
       {/* Toolbar */}
-      <div className="flex-shrink-0 p-3 border-b border-border flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 overflow-x-auto">
-          <Button variant="ghost" size="sm" onClick={navigateUp} disabled={!currentPath}>
+      <div className="flex-shrink-0 p-2 sm:p-3 border-b border-border flex items-center justify-between gap-1 sm:gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto min-w-0">
+          <Button variant="ghost" size="sm" onClick={navigateUp} disabled={!currentPath} className="px-2">
             ..
           </Button>
-          <span className="text-sm text-muted-foreground font-mono truncate">/{currentPath || ''}</span>
+          <span className="text-xs sm:text-sm text-muted-foreground font-mono truncate max-w-[120px] sm:max-w-none">
+            /{currentPath || ''}
+          </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
           <Button
             variant="outline"
-            size="sm"
+            size="icon"
+            className="h-8 w-8"
             onClick={() => {
               setCreateType('folder');
               setShowCreateDialog(true);
@@ -374,7 +377,8 @@ export function FileManager({ panelId }: FileManagerProps) {
           </Button>
           <Button
             variant="outline"
-            size="sm"
+            size="icon"
+            className="h-8 w-8"
             onClick={() => {
               setCreateType('file');
               setShowCreateDialog(true);
@@ -382,10 +386,10 @@ export function FileManager({ panelId }: FileManagerProps) {
           >
             <FilePlus className="w-4 h-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => fileInputRef.current?.click()}>
             <Upload className="w-4 h-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={fetchFiles} disabled={loading}>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={fetchFiles} disabled={loading}>
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
           <input
@@ -400,8 +404,8 @@ export function FileManager({ panelId }: FileManagerProps) {
 
       {/* Bulk Actions Bar */}
       {hasSelection && (
-        <div className="flex-shrink-0 p-2 border-b border-border bg-muted/50 flex items-center gap-2">
-          <span className="text-sm text-muted-foreground ml-2">
+        <div className="flex-shrink-0 p-2 border-b border-border bg-muted/50 flex items-center gap-1 sm:gap-2 overflow-x-auto">
+          <span className="text-xs sm:text-sm text-muted-foreground ml-2 whitespace-nowrap">
             {selectedFiles.size} selected
           </span>
           <div className="flex-1" />
@@ -410,32 +414,34 @@ export function FileManager({ panelId }: FileManagerProps) {
             size="sm"
             onClick={handleBulkDownload}
             disabled={bulkLoading}
+            className="h-8 px-2 sm:px-3"
           >
-            <Download className="w-4 h-4 mr-1" />
-            Download
+            <Download className="w-4 h-4 sm:mr-1" />
+            <span className="hidden sm:inline">Download</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={handleBulkArchive}
             disabled={bulkLoading}
+            className="h-8 px-2 sm:px-3"
           >
-            <Archive className="w-4 h-4 mr-1" />
-            Archive
+            <Archive className="w-4 h-4 sm:mr-1" />
+            <span className="hidden sm:inline">Archive</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={handleBulkDelete}
             disabled={bulkLoading}
-            className="text-destructive hover:text-destructive"
+            className="h-8 px-2 sm:px-3 text-destructive hover:text-destructive"
           >
             {bulkLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <>
-                <Trash2 className="w-4 h-4 mr-1" />
-                Delete
+                <Trash2 className="w-4 h-4 sm:mr-1" />
+                <span className="hidden sm:inline">Delete</span>
               </>
             )}
           </Button>
@@ -443,7 +449,7 @@ export function FileManager({ panelId }: FileManagerProps) {
       )}
 
       {/* File List */}
-      <div className="flex-1 overflow-y-auto p-3 min-h-0">
+      <div className="flex-1 overflow-y-auto p-2 sm:p-3 min-h-0">
         {loading ? (
           <div className="flex items-center justify-center h-32">
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -455,15 +461,15 @@ export function FileManager({ panelId }: FileManagerProps) {
             <p className="text-sm">Create or upload files to get started</p>
           </div>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             {/* Select All Row */}
-            <div className="flex items-center gap-3 p-2 border-b border-border/50 mb-2">
+            <div className="flex items-center gap-2 sm:gap-3 p-2 border-b border-border/50 mb-2">
               <Checkbox
                 checked={isAllSelected}
                 onCheckedChange={toggleSelectAll}
                 className="data-[state=checked]:bg-primary"
               />
-              <span className="text-sm text-muted-foreground flex items-center gap-1">
+              <span className="text-xs sm:text-sm text-muted-foreground flex items-center gap-1">
                 <CheckSquare className="w-4 h-4" />
                 Select All
               </span>
@@ -472,7 +478,7 @@ export function FileManager({ panelId }: FileManagerProps) {
             {files.map((file) => (
               <div
                 key={file.path}
-                className={`flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors group ${
+                className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors ${
                   selectedFiles.has(file.path) ? 'bg-muted/30' : ''
                 }`}
               >
@@ -480,18 +486,18 @@ export function FileManager({ panelId }: FileManagerProps) {
                   checked={selectedFiles.has(file.path)}
                   onCheckedChange={() => toggleSelect(file.path)}
                   onClick={(e) => e.stopPropagation()}
-                  className="data-[state=checked]:bg-primary"
+                  className="data-[state=checked]:bg-primary flex-shrink-0"
                 />
                 <button
-                  className="flex items-center gap-3 flex-1 text-left"
+                  className="flex items-center gap-2 sm:gap-3 flex-1 text-left min-w-0"
                   onClick={() =>
                     file.type === 'directory' ? navigateToFolder(file) : handleEdit(file)
                   }
                 >
-                  {getFileIcon(file)}
-                  <span className="truncate">{file.name}</span>
+                  <span className="flex-shrink-0">{getFileIcon(file)}</span>
+                  <span className="truncate text-sm">{file.name}</span>
                   {file.size !== null && file.type === 'file' && (
-                    <span className="text-xs text-muted-foreground ml-auto mr-2">
+                    <span className="text-xs text-muted-foreground ml-auto mr-1 hidden sm:block">
                       {file.size < 1024 ? `${file.size} B` : `${(file.size / 1024).toFixed(1)} KB`}
                     </span>
                   )}
@@ -501,7 +507,7 @@ export function FileManager({ panelId }: FileManagerProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="h-8 w-8 flex-shrink-0"
                     >
                       <MoreVertical className="w-4 h-4" />
                     </Button>
