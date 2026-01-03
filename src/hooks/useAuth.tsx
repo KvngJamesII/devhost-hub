@@ -33,57 +33,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [profileFetched, setProfileFetched] = useState<string | null>(null);
 
   const fetchProfile = async (userId: string) => {
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    // Avoid duplicate fetches for the same user
+    if (profileFetched === userId) return;
+    setProfileFetched(userId);
 
-    if (profileData) {
-      setProfile(profileData as Profile);
+    // Parallel fetch profile and roles
+    const [profileResult, roleResult] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', userId).single(),
+      supabase.from('user_roles').select('role').eq('user_id', userId)
+    ]);
+
+    if (profileResult.data) {
+      setProfile(profileResult.data as Profile);
     }
 
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId);
-
-    if (roleData) {
-      setIsAdmin(roleData.some(r => r.role === 'admin'));
+    if (roleResult.data) {
+      setIsAdmin(roleResult.data.some(r => r.role === 'admin'));
     }
   };
 
   const refreshProfile = async () => {
     if (user) {
+      setProfileFetched(null); // Reset to allow refetch
       await fetchProfile(user.id);
     }
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+    let initialSessionHandled = false;
 
-        if (session?.user) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, currentSession) => {
+        // Skip if this is just the initial session we already handled
+        if (event === 'INITIAL_SESSION' && initialSessionHandled) {
+          return;
+        }
+
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+
+        if (currentSession?.user) {
+          // Use setTimeout to avoid potential deadlock with Supabase client
           setTimeout(() => {
-            fetchProfile(session.user.id);
+            fetchProfile(currentSession.user.id);
           }, 0);
         } else {
           setProfile(null);
           setIsAdmin(false);
+          setProfileFetched(null);
         }
         setLoading(false);
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      initialSessionHandled = true;
+      setSession(initialSession);
+      setUser(initialSession?.user ?? null);
+      if (initialSession?.user) {
+        fetchProfile(initialSession.user.id);
       }
       setLoading(false);
     });
