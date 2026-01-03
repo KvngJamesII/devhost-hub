@@ -165,7 +165,13 @@ serve(async (req) => {
       body: vmBody ? JSON.stringify(vmBody) : undefined,
     });
 
-    const vmData = await vmResponse.json();
+    let vmData = await vmResponse.json();
+
+    // Normalize status values coming from PM2/VM to match our frontend + DB enums
+    if (action === 'app:status' && vmData?.status === 'online') {
+      vmData = { ...vmData, status: 'running' };
+    }
+
     console.log('VM API response:', vmData);
 
     // Update panel status in database if relevant
