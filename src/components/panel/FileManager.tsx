@@ -53,8 +53,11 @@ export function FileManager({ panelId }: FileManagerProps) {
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [createType, setCreateType] = useState<'file' | 'folder'>('file');
   const [newName, setNewName] = useState('');
+  const [renamingFile, setRenamingFile] = useState<PanelFile | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const [editingFile, setEditingFile] = useState<PanelFile | null>(null);
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
@@ -327,6 +330,56 @@ export function FileManager({ panelId }: FileManagerProps) {
     setSaving(false);
   };
 
+  const handleRename = (file: PanelFile) => {
+    setRenamingFile(file);
+    setRenameValue(file.name);
+    setShowRenameDialog(true);
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!renamingFile || !renameValue.trim()) return;
+    setSaving(true);
+
+    try {
+      const oldPath = renamingFile.path;
+      const pathParts = oldPath.split('/');
+      pathParts.pop();
+      const newPath = pathParts.length > 0 
+        ? `${pathParts.join('/')}/${renameValue.trim()}`
+        : renameValue.trim();
+
+      if (renamingFile.type === 'file') {
+        // For files: get content, create new, delete old
+        const result = await vmApi.getFileContent(panelId, oldPath);
+        await vmApi.syncFiles(panelId, [{ path: newPath, content: result.content }]);
+        await vmApi.deleteFile(panelId, oldPath);
+      } else {
+        // For directories: create new, can't easily move contents via current API
+        // Just create new directory (user will need to move files manually)
+        await vmApi.createDirectory(panelId, newPath);
+        toast({
+          title: 'Note',
+          description: 'New folder created. Please move files manually and delete old folder.',
+        });
+      }
+
+      toast({
+        title: 'Renamed',
+        description: `Renamed to ${renameValue.trim()}`,
+      });
+      setShowRenameDialog(false);
+      setRenamingFile(null);
+      fetchFiles();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to rename',
+        variant: 'destructive',
+      });
+    }
+    setSaving(false);
+  };
+
   const navigateToFolder = (folder: PanelFile) => {
     setCurrentPath(folder.path);
   };
@@ -519,6 +572,10 @@ export function FileManager({ panelId }: FileManagerProps) {
                         Edit
                       </DropdownMenuItem>
                     )}
+                    <DropdownMenuItem onClick={() => handleRename(file)}>
+                      <FileCode className="w-4 h-4 mr-2" />
+                      Rename
+                    </DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-destructive"
                       onClick={() => handleDelete(file)}
@@ -579,6 +636,31 @@ export function FileManager({ panelId }: FileManagerProps) {
             onChange={(e) => setEditContent(e.target.value)}
             placeholder="// Your code here..."
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Dialog */}
+      <Dialog open={showRenameDialog} onOpenChange={setShowRenameDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rename {renamingFile?.type === 'directory' ? 'Folder' : 'File'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Input
+              placeholder="New name"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleRenameSubmit()}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowRenameDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRenameSubmit} disabled={saving}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Rename'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
