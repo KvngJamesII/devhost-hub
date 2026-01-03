@@ -15,15 +15,45 @@ export function ConsoleView({ panelId, panelStatus }: ConsoleViewProps) {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
+  // Strip ANSI escape codes and clean PM2 output
+  const cleanLogLine = (line: string): string => {
+    // Remove ANSI escape codes
+    let cleaned = line.replace(/\x1b\[[0-9;]*m/g, '');
+    // Also remove the bracket format [32m etc
+    cleaned = cleaned.replace(/\[\d+m/g, '');
+    // Remove PM2 prefix like "1|panel-39 | " or "2|panel-392b497c... | "
+    cleaned = cleaned.replace(/^\d+\|panel-[a-z0-9-]+\s*\|\s*/i, '');
+    return cleaned.trim();
+  };
+
+  const isMetadataLine = (line: string): boolean => {
+    const lower = line.toLowerCase();
+    return (
+      lower.includes('[tailing]') ||
+      lower.includes('.pm2/logs/') ||
+      lower.includes('last 200 lines') ||
+      lower.includes('last 100 lines') ||
+      line.trim() === ''
+    );
+  };
+
   const fetchLogs = async () => {
     if (panelStatus !== 'running') return;
     
     setLoading(true);
     try {
       const result = await vmApi.getLogs(panelId, 200);
-      // Logs come as strings from PM2, split into lines
-      const outLines = result.logs?.out ? result.logs.out.split('\n').filter(Boolean) : [];
-      const errLines = result.logs?.err ? result.logs.err.split('\n').filter(Boolean) : [];
+      // Logs come as strings from PM2, split into lines, clean and filter
+      const outLines = result.logs?.out 
+        ? result.logs.out.split('\n')
+            .map(cleanLogLine)
+            .filter(line => line && !isMetadataLine(line))
+        : [];
+      const errLines = result.logs?.err 
+        ? result.logs.err.split('\n')
+            .map(cleanLogLine)
+            .filter(line => line && !isMetadataLine(line))
+        : [];
       setLogs({ out: outLines, err: errLines });
     } catch (error) {
       console.error('Failed to fetch logs:', error);
