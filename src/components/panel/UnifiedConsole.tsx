@@ -14,11 +14,12 @@ interface ConsoleLine {
   id: string;
   type: 'stdout' | 'stderr' | 'input' | 'output' | 'error';
   content: string;
-  timestamp: Date;
+  timestamp: number;
 }
 
 export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
-  const [lines, setLines] = useState<ConsoleLine[]>([]);
+  const [logLines, setLogLines] = useState<ConsoleLine[]>([]);
+  const [commandLines, setCommandLines] = useState<ConsoleLine[]>([]);
   const [input, setInput] = useState('');
   const [executing, setExecuting] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -28,8 +29,12 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
 
   // Strip ANSI escape codes and clean PM2 output
   const cleanLogLine = (line: string): string => {
-    let cleaned = line.replace(/\\x1b\[[0-9;]*m/g, '');
-    cleaned = cleaned.replace(/\[\d+m/g, '');
+    // Remove ANSI escape codes (both escaped and raw)
+    let cleaned = line
+      .replace(/\x1b\[[0-9;]*m/g, '')
+      .replace(/\\x1b\[[0-9;]*m/g, '')
+      .replace(/\[\d+m/g, '');
+    // Remove PM2 prefix like "1|panel-39 | " or "2|panel-392b497c... | "
     cleaned = cleaned.replace(/^\d+\|panel-[a-z0-9-]+\s*\|\s*/i, '');
     return cleaned.trim();
   };
@@ -50,35 +55,35 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
     
     setLoading(true);
     try {
-      const result = await vmApi.getLogs(panelId, 200);
-      const outLines = result.logs?.out 
+      const result = await vmApi.getLogs(panelId, 100);
+      const now = Date.now();
+      
+      const outLines: ConsoleLine[] = result.logs?.out 
         ? result.logs.out.split('\n')
             .map(cleanLogLine)
             .filter(line => line && !isMetadataLine(line))
             .map((content, i) => ({
-              id: `out-${i}`,
+              id: `out-${now}-${i}`,
               type: 'stdout' as const,
               content,
-              timestamp: new Date(),
+              timestamp: now,
             }))
         : [];
-      const errLines = result.logs?.err 
+      
+      const errLines: ConsoleLine[] = result.logs?.err 
         ? result.logs.err.split('\n')
             .map(cleanLogLine)
             .filter(line => line && !isMetadataLine(line))
             .map((content, i) => ({
-              id: `err-${i}`,
+              id: `err-${now}-${i}`,
               type: 'stderr' as const,
               content,
-              timestamp: new Date(),
+              timestamp: now,
             }))
         : [];
       
-      // Keep command history, replace logs
-      setLines(prev => {
-        const commandLines = prev.filter(l => l.type === 'input' || l.type === 'output' || l.type === 'error');
-        return [...outLines, ...errLines, ...commandLines];
-      });
+      // Replace log lines entirely (PM2 gives us latest logs each time)
+      setLogLines([...outLines, ...errLines]);
     } catch (error) {
       console.error('Failed to fetch logs:', error);
     }
@@ -89,12 +94,13 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
     if (panelStatus === 'running') {
       fetchLogs();
     } else {
-      setLines([{
+      setLogLines([{
         id: 'welcome',
         type: 'stdout',
         content: 'iDev Host Console v1.0.0 - Panel is not running',
-        timestamp: new Date(),
+        timestamp: Date.now(),
       }]);
+      setCommandLines([]);
     }
   }, [panelId, panelStatus]);
 
@@ -107,7 +113,7 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
 
   useEffect(() => {
     consoleRef.current?.scrollTo(0, consoleRef.current.scrollHeight);
-  }, [lines]);
+  }, [logLines, commandLines]);
 
   const handleCommand = async (command: string) => {
     const trimmed = command.trim();
@@ -117,26 +123,27 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
       id: `cmd-${Date.now()}`,
       type: 'input',
       content: `$ ${trimmed}`,
-      timestamp: new Date(),
+      timestamp: Date.now(),
     };
-    setLines(prev => [...prev, inputLine]);
+    setCommandLines(prev => [...prev, inputLine]);
     setInput('');
 
     // Handle local commands
     if (trimmed === 'clear') {
-      setLines([]);
+      setLogLines([]);
+      setCommandLines([]);
       return;
     }
 
     if (trimmed === 'help') {
-      setLines(prev => [...prev, {
+      setCommandLines(prev => [...prev, {
         id: `help-${Date.now()}`,
         type: 'output',
         content: `Commands:
   help    - Show this help
   clear   - Clear console
   Any command will execute on the server`,
-        timestamp: new Date(),
+        timestamp: Date.now(),
       }]);
       return;
     }
@@ -146,37 +153,37 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
       const result = await vmApi.exec(panelId, trimmed);
       
       if (result.stdout) {
-        setLines(prev => [...prev, {
+        setCommandLines(prev => [...prev, {
           id: `stdout-${Date.now()}`,
           type: 'output',
           content: result.stdout,
-          timestamp: new Date(),
+          timestamp: Date.now(),
         }]);
       }
       
       if (result.stderr) {
-        setLines(prev => [...prev, {
+        setCommandLines(prev => [...prev, {
           id: `stderr-${Date.now()}`,
           type: 'error',
           content: result.stderr,
-          timestamp: new Date(),
+          timestamp: Date.now(),
         }]);
       }
       
       if (!result.stdout && !result.stderr) {
-        setLines(prev => [...prev, {
+        setCommandLines(prev => [...prev, {
           id: `empty-${Date.now()}`,
           type: 'output',
           content: '(no output)',
-          timestamp: new Date(),
+          timestamp: Date.now(),
         }]);
       }
     } catch (error: any) {
-      setLines(prev => [...prev, {
+      setCommandLines(prev => [...prev, {
         id: `error-${Date.now()}`,
         type: 'error',
         content: `Error: ${error.message}`,
-        timestamp: new Date(),
+        timestamp: Date.now(),
       }]);
     }
     setExecuting(false);
@@ -191,10 +198,12 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
   const clearConsole = async () => {
     try {
       await vmApi.clearLogs(panelId);
-      setLines([]);
+      setLogLines([]);
+      setCommandLines([]);
     } catch (error) {
       console.error('Failed to clear logs:', error);
-      setLines([]);
+      setLogLines([]);
+      setCommandLines([]);
     }
   };
 
@@ -212,6 +221,9 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
         return 'text-green-400';
     }
   };
+
+  // Combine logs and commands - logs first, then commands
+  const allLines = [...logLines, ...commandLines];
 
   return (
     <div className="h-[calc(100vh-280px)] flex flex-col bg-black/95">
@@ -262,7 +274,7 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
         className="flex-1 overflow-y-auto p-3 sm:p-4 font-mono text-xs sm:text-sm min-h-0"
         onClick={() => inputRef.current?.focus()}
       >
-        {lines.length === 0 ? (
+        {allLines.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <Terminal className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p className="text-sm">Console ready</p>
@@ -270,7 +282,7 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
           </div>
         ) : (
           <div className="space-y-0.5">
-            {lines.map((line) => (
+            {allLines.map((line) => (
               <div
                 key={line.id}
                 className={`py-0.5 whitespace-pre-wrap break-all ${getLineColor(line.type)}`}
