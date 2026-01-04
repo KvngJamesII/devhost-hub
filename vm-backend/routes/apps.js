@@ -11,6 +11,18 @@ const portManager = require('../utils/ports');
 
 const APPS_DIR = process.env.APPS_DIR || path.join(process.env.HOME, 'apps');
 
+function findRequirementsFile(appDir) {
+  try {
+    const entries = fs.readdirSync(appDir, { withFileTypes: true });
+    const match = entries.find(
+      (e) => e.isFile() && e.name.toLowerCase() === 'requirements.txt'
+    );
+    return match ? path.join(appDir, match.name) : null;
+  } catch {
+    return null;
+  }
+}
+
 // Get app status
 router.get('/:panelId/status', async (req, res) => {
   try {
@@ -86,18 +98,18 @@ router.post('/:panelId/deploy', async (req, res) => {
         await execAsync(`cd "${appDir}" && python3 -m venv venv`, { timeout: 60000 });
       }
       
-      // Install requirements if exists
-      if (fs.existsSync(path.join(appDir, 'requirements.txt'))) {
-        console.log(`Installing pip dependencies for ${panelId}`);
+      // Install requirements if exists (case-insensitive: requirements.txt / Requirements.txt)
+      const requirementsFile = findRequirementsFile(appDir);
+      if (requirementsFile) {
+        console.log(`Installing pip dependencies for ${panelId} from ${path.basename(requirementsFile)}`);
         try {
           // Upgrade pip first
           await execAsync(`"${venvPip}" install --upgrade pip`, { timeout: 60000 });
           // Install requirements
-          await execAsync(`cd "${appDir}" && "${venvPip}" install -r requirements.txt`, { timeout: 300000 });
+          await execAsync(`cd "${appDir}" && "${venvPip}" install -r "${requirementsFile}"`, { timeout: 300000 });
         } catch (pipErr) {
           console.error(`Initial pip install failed for ${panelId}:`, pipErr.message);
-          // Don't throw here, let the user see the error in logs if possible, 
-          // but we've already improved the start/restart logic to handle this too.
+          // Don't throw here, let the user see the error in logs if possible.
         }
       }
     }
@@ -156,7 +168,7 @@ router.post('/:panelId/start', async (req, res) => {
       const venvPath = path.join(appDir, 'venv');
       const venvPython = path.join(venvPath, 'bin', 'python');
       const venvPip = path.join(venvPath, 'bin', 'pip');
-      const requirementsPath = path.join(appDir, 'requirements.txt');
+      const requirementsFile = findRequirementsFile(appDir);
 
       if (!fs.existsSync(path.join(appDir, entryFile))) {
         return res.status(400).json({ error: `Entry point ${entryFile} not found` });
@@ -177,13 +189,13 @@ router.post('/:panelId/start', async (req, res) => {
         }
       }
 
-      // Install requirements if exists
-      if (fs.existsSync(requirementsPath)) {
-        console.log(`Installing pip dependencies for ${panelId}`);
+      // Install requirements if exists (case-insensitive)
+      if (requirementsFile) {
+        console.log(`Installing pip dependencies for ${panelId} from ${path.basename(requirementsFile)}`);
         try {
           // Upgrade pip first, then install requirements
           await execAsync(`cd "${appDir}" && "${venvPip}" install --upgrade pip`, { timeout: 60000 });
-          await execAsync(`cd "${appDir}" && "${venvPip}" install -r requirements.txt`, { timeout: 300000 });
+          await execAsync(`cd "${appDir}" && "${venvPip}" install -r "${requirementsFile}"`, { timeout: 300000 });
         } catch (pipErr) {
           console.error(`pip install failed for ${panelId}:`, pipErr.message);
           return res.status(500).json({ error: `Failed to install Python dependencies: ${pipErr.message}` });
@@ -252,8 +264,8 @@ router.post('/:panelId/restart', async (req, res) => {
       }
     }
 
-    const requirementsPath = path.join(appDir, 'requirements.txt');
-    if (fs.existsSync(requirementsPath)) {
+    const requirementsFile = findRequirementsFile(appDir);
+    if (requirementsFile) {
       const venvPath = path.join(appDir, 'venv');
       const venvPython = path.join(venvPath, 'bin', 'python');
       const venvPip = path.join(venvPath, 'bin', 'pip');
@@ -271,10 +283,10 @@ router.post('/:panelId/restart', async (req, res) => {
         }
       }
 
-      console.log(`Installing pip dependencies for ${panelId} (restart)`);
+      console.log(`Installing pip dependencies for ${panelId} (restart) from ${path.basename(requirementsFile)}`);
       try {
         await execAsync(`cd "${appDir}" && "${venvPip}" install --upgrade pip`, { timeout: 60000 });
-        await execAsync(`cd "${appDir}" && "${venvPip}" install -r requirements.txt`, { timeout: 300000 });
+        await execAsync(`cd "${appDir}" && "${venvPip}" install -r "${requirementsFile}"`, { timeout: 300000 });
       } catch (pipErr) {
         console.error(`pip install failed for ${panelId} (restart):`, pipErr.message);
         return res.status(500).json({ error: `Failed to install Python dependencies: ${pipErr.message}` });
