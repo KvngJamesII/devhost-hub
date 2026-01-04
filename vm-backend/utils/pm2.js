@@ -34,7 +34,15 @@ class PM2Manager {
       .map(([k, v]) => `${k}="${v}"`)
       .join(' ');
     
-    const cmd = `cd "${cwd}" && ${envString} pm2 start ${script} --name "${name}" --update-env`;
+    let cmd;
+    if (script.includes('/venv/bin/python')) {
+      const parts = script.split(' ');
+      const interpreter = parts[0];
+      const mainScript = parts.slice(1).join(' ');
+      cmd = `cd "${cwd}" && ${envString} pm2 start "${mainScript}" --name "${name}" --interpreter "${interpreter}" --update-env`;
+    } else {
+      cmd = `cd "${cwd}" && ${envString} pm2 start ${script} --name "${name}" --update-env`;
+    }
     console.log('Starting process:', cmd);
     
     try {
