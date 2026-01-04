@@ -19,6 +19,17 @@ class PM2Manager {
   }
 
   async start(name, script, cwd, env = {}) {
+    // Delete any existing process with this name to prevent duplicates
+    try {
+      const existing = await this.getProcess(name);
+      if (existing) {
+        console.log(`Deleting existing process "${name}" before starting new one`);
+        await execAsync(`pm2 delete "${name}"`).catch(() => {});
+      }
+    } catch (e) {
+      // Ignore - process may not exist
+    }
+
     const envString = Object.entries(env)
       .map(([k, v]) => `${k}="${v}"`)
       .join(' ');
