@@ -16,7 +16,6 @@ import {
   Loader2,
   FolderOpen,
   Terminal,
-  FileText,
   Settings,
   AlertCircle,
   RefreshCw,
@@ -26,7 +25,6 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { FileManager } from '@/components/panel/FileManager';
-import { LogsViewer } from '@/components/panel/LogsViewer';
 import { UnifiedConsole } from '@/components/panel/UnifiedConsole';
 import { StartupSettings } from '@/components/panel/StartupSettings';
 import { PanelSettings } from '@/components/panel/PanelSettings';
@@ -455,13 +453,6 @@ const PanelPage = () => {
             <span className="hidden sm:inline">Files</span>
           </TabsTrigger>
           <TabsTrigger
-            value="logs"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-3 sm:px-4 py-3"
-          >
-            <FileText className="w-4 h-4 sm:mr-2" />
-            <span className="hidden sm:inline">Logs</span>
-          </TabsTrigger>
-          <TabsTrigger
             value="startup"
             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-3 sm:px-4 py-3"
           >
@@ -483,10 +474,6 @@ const PanelPage = () => {
 
         <TabsContent value="files" className="flex-1 m-0">
           <FileManager panelId={panel.id} />
-        </TabsContent>
-
-        <TabsContent value="logs" className="flex-1 m-0">
-          <LogsViewer panelId={panel.id} />
         </TabsContent>
 
         <TabsContent value="startup" className="flex-1 m-0 overflow-y-auto">
