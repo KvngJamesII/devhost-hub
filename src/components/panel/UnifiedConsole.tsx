@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Terminal, Trash2, RefreshCw, Loader2, Send } from 'lucide-react';
 import { vmApi } from '@/lib/vmApi';
+import { supabase } from '@/integrations/supabase/client';
 
 interface UnifiedConsoleProps {
   panelId: string;
@@ -12,13 +13,14 @@ interface UnifiedConsoleProps {
 
 interface ConsoleLine {
   id: string;
-  type: 'stdout' | 'stderr' | 'input' | 'output' | 'error';
+  type: 'stdout' | 'stderr' | 'input' | 'output' | 'error' | 'info' | 'success' | 'system';
   content: string;
   timestamp: number;
 }
 
 export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
   const [logLines, setLogLines] = useState<ConsoleLine[]>([]);
+  const [systemLogs, setSystemLogs] = useState<ConsoleLine[]>([]);
   const [commandLines, setCommandLines] = useState<ConsoleLine[]>([]);
   const [input, setInput] = useState('');
   const [executing, setExecuting] = useState(false);
@@ -49,6 +51,62 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
       line.trim() === ''
     );
   };
+
+  // Fetch system logs from Supabase (deployment events, errors, etc.)
+  const fetchSystemLogs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('panel_logs')
+        .select('*')
+        .eq('panel_id', panelId)
+        .order('created_at', { ascending: true })
+        .limit(50);
+
+      if (error) throw error;
+
+      const logs: ConsoleLine[] = (data || []).map((log) => ({
+        id: `sys-${log.id}`,
+        type: log.log_type === 'error' ? 'error' : log.log_type === 'success' ? 'success' : 'info',
+        content: `[${log.log_type.toUpperCase()}] ${log.message}`,
+        timestamp: new Date(log.created_at).getTime(),
+      }));
+
+      setSystemLogs(logs);
+    } catch (error) {
+      console.error('Failed to fetch system logs:', error);
+    }
+  };
+
+  // Subscribe to real-time system logs
+  useEffect(() => {
+    fetchSystemLogs();
+
+    const channel = supabase
+      .channel(`panel-logs-${panelId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'panel_logs',
+          filter: `panel_id=eq.${panelId}`,
+        },
+        (payload) => {
+          const log = payload.new as any;
+          setSystemLogs(prev => [...prev, {
+            id: `sys-${log.id}`,
+            type: log.log_type === 'error' ? 'error' : log.log_type === 'success' ? 'success' : 'info',
+            content: `[${log.log_type.toUpperCase()}] ${log.message}`,
+            timestamp: new Date(log.created_at).getTime(),
+          }]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [panelId]);
 
   const fetchLogs = async () => {
     if (panelStatus !== 'running') return;
@@ -198,11 +256,15 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
   const clearConsole = async () => {
     try {
       await vmApi.clearLogs(panelId);
+      // Also clear system logs from DB
+      await supabase.from('panel_logs').delete().eq('panel_id', panelId);
       setLogLines([]);
+      setSystemLogs([]);
       setCommandLines([]);
     } catch (error) {
       console.error('Failed to clear logs:', error);
       setLogLines([]);
+      setSystemLogs([]);
       setCommandLines([]);
     }
   };
@@ -214,6 +276,11 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
       case 'stderr':
       case 'error':
         return 'text-destructive';
+      case 'success':
+        return 'text-success';
+      case 'info':
+      case 'system':
+        return 'text-yellow-400';
       case 'output':
         return 'text-blue-400';
       case 'stdout':
@@ -222,8 +289,8 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
     }
   };
 
-  // Combine logs and commands - logs first, then commands
-  const allLines = [...logLines, ...commandLines];
+  // Combine system logs, PM2 logs, and commands - sorted by timestamp
+  const allLines = [...systemLogs, ...logLines, ...commandLines].sort((a, b) => a.timestamp - b.timestamp);
 
   return (
     <div className="h-[calc(100vh-280px)] flex flex-col bg-black/95">
