@@ -39,10 +39,15 @@ export function CreatePanelDialog({ open, onOpenChange, onCreated }: CreatePanel
 
     setLoading(true);
 
+    // Default expiry is 1 month from now
+    const expiresAt = new Date();
+    expiresAt.setMonth(expiresAt.getMonth() + 1);
+
     const { error } = await supabase.from('panels').insert({
       user_id: user?.id,
       name: name.trim(),
       language,
+      expires_at: expiresAt.toISOString(),
     });
 
     if (error) {
