@@ -121,6 +121,7 @@ export type Database = {
           created_at: string
           droplet_id: string | null
           entry_point: string | null
+          expires_at: string | null
           id: string
           language: Database["public"]["Enums"]["panel_language"]
           name: string
@@ -132,6 +133,7 @@ export type Database = {
           created_at?: string
           droplet_id?: string | null
           entry_point?: string | null
+          expires_at?: string | null
           id?: string
           language: Database["public"]["Enums"]["panel_language"]
           name: string
@@ -143,6 +145,7 @@ export type Database = {
           created_at?: string
           droplet_id?: string | null
           entry_point?: string | null
+          expires_at?: string | null
           id?: string
           language?: Database["public"]["Enums"]["panel_language"]
           name?: string
@@ -224,6 +227,7 @@ export type Database = {
           created_at: string
           created_by: string
           current_uses: number
+          duration_hours: number | null
           expires_at: string | null
           id: string
           is_active: boolean
@@ -235,6 +239,7 @@ export type Database = {
           created_at?: string
           created_by: string
           current_uses?: number
+          duration_hours?: number | null
           expires_at?: string | null
           id?: string
           is_active?: boolean
@@ -246,6 +251,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           current_uses?: number
+          duration_hours?: number | null
           expires_at?: string | null
           id?: string
           is_active?: boolean

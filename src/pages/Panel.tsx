@@ -23,6 +23,7 @@ import {
   MemoryStick,
   Clock,
   RotateCcw,
+  CalendarClock,
 } from 'lucide-react';
 import { FileManager } from '@/components/panel/FileManager';
 import { UnifiedConsole } from '@/components/panel/UnifiedConsole';
@@ -46,6 +47,7 @@ interface Panel {
   status: 'stopped' | 'running' | 'deploying' | 'error';
   created_at: string;
   entry_point?: string | null;
+  expires_at?: string | null;
 }
 
 const PanelPage = () => {
@@ -341,6 +343,11 @@ const PanelPage = () => {
               <h1 className="font-semibold text-sm">{panel.name}</h1>
               <p className="text-xs text-muted-foreground">
                 {panel.language === 'nodejs' ? 'Node.js' : 'Python'}
+                {panel.expires_at && (
+                  <span className={`ml-2 ${new Date(panel.expires_at) < new Date() ? 'text-destructive' : new Date(panel.expires_at) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'text-warning' : ''}`}>
+                    • Expires {new Date(panel.expires_at).toLocaleDateString()}
+                  </span>
+                )}
               </p>
             </div>
           </div>

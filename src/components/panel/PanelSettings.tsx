@@ -13,6 +13,7 @@ interface Panel {
   language: 'nodejs' | 'python';
   status: string;
   created_at: string;
+  expires_at?: string | null;
 }
 
 interface PanelSettingsProps {
@@ -97,6 +98,23 @@ export function PanelSettings({ panel, onUpdate }: PanelSettingsProps) {
               className="bg-muted"
             />
           </div>
+
+          {panel.expires_at && (
+            <div className="space-y-2">
+              <Label>Expires At</Label>
+              <Input
+                value={new Date(panel.expires_at).toLocaleString()}
+                disabled
+                className={`bg-muted ${new Date(panel.expires_at) < new Date() ? 'text-destructive border-destructive' : new Date(panel.expires_at) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'text-warning border-warning' : ''}`}
+              />
+              {new Date(panel.expires_at) < new Date() && (
+                <p className="text-xs text-destructive">This panel has expired</p>
+              )}
+              {new Date(panel.expires_at) >= new Date() && new Date(panel.expires_at) < new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) && (
+                <p className="text-xs text-warning">This panel expires soon</p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Panel ID</Label>

@@ -32,10 +32,22 @@ const generateCode = (): string => {
   return `IDEV-${segment1}-${segment2}`;
 };
 
+const DURATION_OPTIONS = [
+  { value: '2', label: '2 hours' },
+  { value: '24', label: '1 day' },
+  { value: '168', label: '1 week' },
+  { value: '720', label: '1 month' },
+  { value: '1440', label: '2 months' },
+  { value: '2160', label: '3 months' },
+  { value: '4320', label: '6 months' },
+  { value: '8640', label: '1 year' },
+];
+
 export function RedeemCodeDialog({ open, onOpenChange, onCreated }: RedeemCodeDialogProps) {
   const [step, setStep] = useState(1);
   const [maxUses, setMaxUses] = useState<string>('1');
   const [panelsGranted, setPanelsGranted] = useState<string>('1');
+  const [durationHours, setDurationHours] = useState<string>('720'); // 1 month default
   const [loading, setLoading] = useState(false);
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -56,6 +68,7 @@ export function RedeemCodeDialog({ open, onOpenChange, onCreated }: RedeemCodeDi
       code,
       max_uses: maxUses === 'unlimited' ? null : parseInt(maxUses),
       panels_granted: parseInt(panelsGranted),
+      duration_hours: parseInt(durationHours),
       created_by: user.id,
     });
 
@@ -63,7 +76,7 @@ export function RedeemCodeDialog({ open, onOpenChange, onCreated }: RedeemCodeDi
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } else {
       setGeneratedCode(code);
-      setStep(3);
+      setStep(4);
       onCreated();
     }
     setLoading(false);
@@ -82,8 +95,13 @@ export function RedeemCodeDialog({ open, onOpenChange, onCreated }: RedeemCodeDi
     setStep(1);
     setMaxUses('1');
     setPanelsGranted('1');
+    setDurationHours('720');
     setGeneratedCode(null);
     onOpenChange(false);
+  };
+
+  const getDurationLabel = (hours: string) => {
+    return DURATION_OPTIONS.find(o => o.value === hours)?.label || `${hours} hours`;
   };
 
   return (
@@ -136,8 +154,31 @@ export function RedeemCodeDialog({ open, onOpenChange, onCreated }: RedeemCodeDi
                 </SelectContent>
               </Select>
             </div>
+            <Button className="w-full" onClick={() => setStep(3)}>
+              Next
+            </Button>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Panel duration (how long panels last)</Label>
+              <Select value={durationHours} onValueChange={setDurationHours}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DURATION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => setStep(1)}>
+              <Button variant="outline" className="flex-1" onClick={() => setStep(2)}>
                 Back
               </Button>
               <Button className="flex-1" onClick={handleCreate} disabled={loading}>
@@ -147,7 +188,7 @@ export function RedeemCodeDialog({ open, onOpenChange, onCreated }: RedeemCodeDi
           </div>
         )}
 
-        {step === 3 && generatedCode && (
+        {step === 4 && generatedCode && (
           <div className="space-y-4 py-4">
             <div className="text-center">
               <p className="text-sm text-muted-foreground mb-3">Your redeem code is ready!</p>
@@ -160,6 +201,7 @@ export function RedeemCodeDialog({ open, onOpenChange, onCreated }: RedeemCodeDi
               <div className="mt-4 text-xs text-muted-foreground space-y-1">
                 <p>Uses: {maxUses === 'unlimited' ? 'Unlimited' : maxUses}</p>
                 <p>Panels: {panelsGranted}</p>
+                <p>Duration: {getDurationLabel(durationHours)}</p>
               </div>
             </div>
             <Button className="w-full" onClick={handleClose}>
