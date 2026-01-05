@@ -108,6 +108,29 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
     };
   }, [panelId]);
 
+  // Detect log type from content (Python/Node often send INFO to stderr)
+  const detectLogType = (content: string): ConsoleLine['type'] => {
+    const upper = content.toUpperCase();
+    // Check for common log level patterns
+    if (upper.includes('ERROR:') || upper.includes('[ERROR]') || upper.includes('EXCEPTION') || upper.includes('TRACEBACK')) {
+      return 'error';
+    }
+    if (upper.includes('WARN:') || upper.includes('WARNING:') || upper.includes('[WARN]') || upper.includes('[WARNING]')) {
+      return 'info'; // Yellow for warnings
+    }
+    if (upper.includes('INFO:') || upper.includes('[INFO]') || upper.includes('DEBUG:') || upper.includes('[DEBUG]')) {
+      return 'stdout'; // Green for info/debug
+    }
+    // HTTP status codes - 2xx/3xx are success, 4xx/5xx are errors
+    const httpMatch = content.match(/"\s*(GET|POST|PUT|DELETE|PATCH)\s+[^"]+"\s+(\d{3})/);
+    if (httpMatch) {
+      const status = parseInt(httpMatch[2]);
+      if (status >= 400) return 'error';
+      return 'stdout'; // Green for successful HTTP
+    }
+    return 'stdout'; // Default to green
+  };
+
   const fetchLogs = async () => {
     if (panelStatus !== 'running') return;
     
@@ -122,7 +145,7 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
             .filter(line => line && !isMetadataLine(line))
             .map((content, i) => ({
               id: `out-${now}-${i}`,
-              type: 'stdout' as const,
+              type: detectLogType(content),
               content,
               timestamp: now,
             }))
@@ -134,7 +157,7 @@ export function UnifiedConsole({ panelId, panelStatus }: UnifiedConsoleProps) {
             .filter(line => line && !isMetadataLine(line))
             .map((content, i) => ({
               id: `err-${now}-${i}`,
-              type: 'stderr' as const,
+              type: detectLogType(content), // Detect actual type, not just stderr
               content,
               timestamp: now,
             }))
