@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import {
   Server,
@@ -41,6 +42,13 @@ interface Panel {
   language: 'nodejs' | 'python';
   status: 'stopped' | 'running' | 'deploying' | 'error';
   created_at: string;
+  expires_at: string | null;
+}
+
+interface SetupPanelData {
+  id: string;
+  name: string;
+  language: 'nodejs' | 'python';
 }
 
 // Panel limit now comes from profile.panels_limit
@@ -54,6 +62,10 @@ const Dashboard = () => {
   const [showBuyDialog, setShowBuyDialog] = useState(false);
   const [redeemCode, setRedeemCode] = useState('');
   const [redeeming, setRedeeming] = useState(false);
+  const [setupPanel, setSetupPanel] = useState<SetupPanelData | null>(null);
+  const [setupName, setSetupName] = useState('');
+  const [setupLanguage, setSetupLanguage] = useState<'nodejs' | 'python'>('nodejs');
+  const [savingSetup, setSavingSetup] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -160,18 +172,68 @@ const Dashboard = () => {
         })
         .eq('id', user.id);
 
+      // Calculate expiry date based on code duration
+      const durationHours = codeData.duration_hours || 720; // Default 30 days
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + durationHours);
+
+      // Create panel(s) automatically with placeholder name
+      for (let i = 0; i < codeData.panels_granted; i++) {
+        await supabase.from('panels').insert({
+          user_id: user.id,
+          name: `ClaimedPanel_${Date.now()}_${i}`,
+          language: 'nodejs', // Default, user will change
+          expires_at: expiresAt.toISOString(),
+        });
+      }
+
       toast({ 
         title: 'Code Redeemed!', 
-        description: `You received ${codeData.panels_granted} panel slot(s) and premium access!` 
+        description: `${codeData.panels_granted} panel(s) created! Click on them to set up.` 
       });
       setRedeemCode('');
       
-      // Refresh page to update profile
-      window.location.reload();
+      // Refresh panels
+      await fetchPanels();
     } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     }
     setRedeeming(false);
+  };
+
+  const handlePanelClick = (panel: Panel) => {
+    // Check if panel needs setup (name starts with ClaimedPanel_)
+    if (panel.name.startsWith('ClaimedPanel_')) {
+      setSetupPanel({ id: panel.id, name: '', language: 'nodejs' });
+      setSetupName('');
+      setSetupLanguage('nodejs');
+    } else {
+      navigate(`/panel/${panel.id}`);
+    }
+  };
+
+  const handleSaveSetup = async () => {
+    if (!setupPanel || !setupName.trim()) {
+      toast({ title: 'Name required', description: 'Please enter a name for your panel', variant: 'destructive' });
+      return;
+    }
+
+    setSavingSetup(true);
+    const { error } = await supabase
+      .from('panels')
+      .update({ name: setupName.trim(), language: setupLanguage })
+      .eq('id', setupPanel.id);
+
+    if (error) {
+      toast({ title: 'Error', description: 'Failed to update panel', variant: 'destructive' });
+      setSavingSetup(false);
+    } else {
+      toast({ title: 'Panel configured!', description: 'Your panel is ready to use' });
+      const panelId = setupPanel.id;
+      setSetupPanel(null);
+      setSavingSetup(false);
+      navigate(`/panel/${panelId}`);
+    }
   };
 
   const getStatusInfo = (status: string) => {
@@ -424,7 +486,7 @@ const Dashboard = () => {
               {panels.map((panel) => {
                 const status = getStatusInfo(panel.status);
                 return (
-                  <Link key={panel.id} to={`/panel/${panel.id}`}>
+                  <div key={panel.id} onClick={() => handlePanelClick(panel)} className="cursor-pointer">
                     <div className="group relative bg-card border border-border rounded-xl p-4 hover:border-primary/50 hover:bg-card/80 transition-all active:scale-[0.98]">
                       {/* Status indicator line */}
                       <div className={`absolute left-0 top-4 bottom-4 w-1 rounded-r ${
@@ -462,7 +524,7 @@ const Dashboard = () => {
                         </div>
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 );
               })}
             </div>
@@ -525,6 +587,78 @@ const Dashboard = () => {
             >
               <ExternalLink className="w-4 h-4 mr-2" />
               Contact Admin on Telegram
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Setup Claimed Panel Dialog */}
+      <Dialog open={!!setupPanel} onOpenChange={(open) => !open && setSetupPanel(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Terminal className="w-5 h-5 text-primary" />
+              Configure Your Panel
+            </DialogTitle>
+            <DialogDescription>
+              Set up your claimed panel with a name and programming language
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="panel-name">Panel Name</Label>
+              <Input
+                id="panel-name"
+                placeholder="My Awesome App"
+                value={setupName}
+                onChange={(e) => setSetupName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Programming Language</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSetupLanguage('nodejs')}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    setupLanguage === 'nodejs'
+                      ? 'border-nodejs bg-nodejs/10'
+                      : 'border-border hover:border-nodejs/50'
+                  }`}
+                >
+                  <div className="text-center">
+                    <span className="font-mono font-bold text-2xl text-nodejs">JS</span>
+                    <p className="text-sm text-muted-foreground mt-1">Node.js</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSetupLanguage('python')}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    setupLanguage === 'python'
+                      ? 'border-python bg-python/10'
+                      : 'border-border hover:border-python/50'
+                  }`}
+                >
+                  <div className="text-center">
+                    <span className="font-mono font-bold text-2xl text-python">PY</span>
+                    <p className="text-sm text-muted-foreground mt-1">Python</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setSetupPanel(null)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-primary hover:bg-primary/90"
+              onClick={handleSaveSetup}
+              disabled={savingSetup || !setupName.trim()}
+            >
+              {savingSetup ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save & Open'}
             </Button>
           </div>
         </DialogContent>
