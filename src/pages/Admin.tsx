@@ -29,6 +29,8 @@ import {
   Eye,
   MoreVertical,
   Plus,
+  Calendar,
+  Settings,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -92,6 +94,18 @@ interface UserPanel {
   language: string;
   status: string;
   created_at: string;
+  expires_at: string | null;
+}
+
+interface ManagedPanel {
+  id: string;
+  name: string;
+  language: string;
+  status: string;
+  expires_at: string | null;
+  user_id: string;
+  created_at: string;
+  user_email?: string;
 }
 
 interface Stats {
@@ -130,6 +144,10 @@ const Admin = () => {
   const [loadingPanels, setLoadingPanels] = useState(false);
   const [addPanelsUser, setAddPanelsUser] = useState<User | null>(null);
   const [panelsToAdd, setPanelsToAdd] = useState('1');
+  const [panelIdSearch, setPanelIdSearch] = useState('');
+  const [searchingPanel, setSearchingPanel] = useState(false);
+  const [managedPanel, setManagedPanel] = useState<ManagedPanel | null>(null);
+  const [extendDuration, setExtendDuration] = useState('720'); // hours
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -343,6 +361,91 @@ const Admin = () => {
     fetchData();
   };
 
+  const handleSearchPanel = async () => {
+    if (!panelIdSearch.trim()) return;
+    setSearchingPanel(true);
+
+    const { data: panel, error } = await supabase
+      .from('panels')
+      .select('*')
+      .eq('id', panelIdSearch.trim())
+      .maybeSingle();
+
+    if (error || !panel) {
+      toast({ title: 'Not Found', description: 'No panel found with that ID', variant: 'destructive' });
+      setSearchingPanel(false);
+      return;
+    }
+
+    // Get user email
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('id', panel.user_id)
+      .maybeSingle();
+
+    setManagedPanel({
+      ...panel,
+      user_email: profile?.email,
+    } as ManagedPanel);
+    setSearchingPanel(false);
+  };
+
+  const handleExtendPanel = async () => {
+    if (!managedPanel) return;
+
+    const hours = parseInt(extendDuration) || 720;
+    const currentExpiry = managedPanel.expires_at ? new Date(managedPanel.expires_at) : new Date();
+    const newExpiry = new Date(Math.max(currentExpiry.getTime(), Date.now()));
+    newExpiry.setHours(newExpiry.getHours() + hours);
+
+    const { error } = await supabase
+      .from('panels')
+      .update({ expires_at: newExpiry.toISOString() })
+      .eq('id', managedPanel.id);
+
+    if (error) {
+      toast({ title: 'Error', description: 'Failed to extend panel', variant: 'destructive' });
+    } else {
+      toast({ title: 'Extended!', description: `Panel expires: ${newExpiry.toLocaleDateString()}` });
+      setManagedPanel({ ...managedPanel, expires_at: newExpiry.toISOString() });
+    }
+  };
+
+  const handleDeletePanel = async () => {
+    if (!managedPanel) return;
+
+    const { error } = await supabase
+      .from('panels')
+      .delete()
+      .eq('id', managedPanel.id);
+
+    if (error) {
+      toast({ title: 'Error', description: 'Failed to delete panel', variant: 'destructive' });
+    } else {
+      toast({ title: 'Deleted', description: 'Panel deleted successfully' });
+      setManagedPanel(null);
+      setPanelIdSearch('');
+      fetchData();
+    }
+  };
+
+  const handleStopPanel = async () => {
+    if (!managedPanel) return;
+
+    const { error } = await supabase
+      .from('panels')
+      .update({ status: 'stopped' })
+      .eq('id', managedPanel.id);
+
+    if (error) {
+      toast({ title: 'Error', description: 'Failed to stop panel', variant: 'destructive' });
+    } else {
+      toast({ title: 'Stopped', description: 'Panel stopped successfully' });
+      setManagedPanel({ ...managedPanel, status: 'stopped' });
+    }
+  };
+
   const filteredUsers = users.filter(
     (u) =>
       u.email.toLowerCase().includes(search.toLowerCase()) ||
@@ -480,7 +583,7 @@ const Admin = () => {
 
         {/* Tabs */}
         <Tabs defaultValue="requests" className="space-y-4">
-          <TabsList className="w-full grid grid-cols-3 h-auto">
+          <TabsList className="w-full grid grid-cols-4 h-auto">
             <TabsTrigger value="requests" className="font-mono text-xs py-2 relative">
               Requests
               {requests.length > 0 && (
@@ -488,6 +591,7 @@ const Admin = () => {
               )}
             </TabsTrigger>
             <TabsTrigger value="users" className="font-mono text-xs py-2">Users</TabsTrigger>
+            <TabsTrigger value="panels" className="font-mono text-xs py-2">Panels</TabsTrigger>
             <TabsTrigger value="codes" className="font-mono text-xs py-2">Codes</TabsTrigger>
           </TabsList>
 
@@ -616,6 +720,98 @@ const Admin = () => {
                 </Card>
               ))}
             </div>
+          </TabsContent>
+
+          {/* Panels Tab */}
+          <TabsContent value="panels" className="space-y-4">
+            <Card className="border-primary/30">
+              <CardContent className="p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-primary" />
+                  <p className="font-mono font-medium text-foreground">Manage Panel by ID</p>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter panel ID (UUID)"
+                    value={panelIdSearch}
+                    onChange={(e) => setPanelIdSearch(e.target.value)}
+                    className="font-mono text-sm"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearchPanel()}
+                  />
+                  <Button onClick={handleSearchPanel} disabled={searchingPanel}>
+                    {searchingPanel ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  </Button>
+                </div>
+
+                {managedPanel && (
+                  <div className="mt-4 p-4 bg-muted/30 rounded-lg space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-mono font-bold text-foreground">{managedPanel.name}</p>
+                        <p className="text-sm text-muted-foreground">Owner: {managedPanel.user_email}</p>
+                        <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                          <Badge variant={managedPanel.status === 'running' ? 'default' : 'secondary'}>
+                            {managedPanel.status}
+                          </Badge>
+                          <span>•</span>
+                          <span>{managedPanel.language}</span>
+                          <span>•</span>
+                          <span>ID: {managedPanel.id.slice(0, 8)}...</span>
+                        </div>
+                        {managedPanel.expires_at && (
+                          <div className="flex items-center gap-1 mt-2 text-xs">
+                            <Calendar className="w-3 h-3" />
+                            <span className={new Date(managedPanel.expires_at) < new Date() ? 'text-destructive' : 'text-muted-foreground'}>
+                              Expires: {new Date(managedPanel.expires_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="space-y-3 pt-3 border-t border-border">
+                      <div>
+                        <label className="text-sm font-medium text-foreground">Extend Duration</label>
+                        <div className="flex gap-2 mt-2">
+                          <select
+                            value={extendDuration}
+                            onChange={(e) => setExtendDuration(e.target.value)}
+                            className="flex-1 h-10 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                          >
+                            <option value="2">2 hours</option>
+                            <option value="24">1 day</option>
+                            <option value="168">1 week</option>
+                            <option value="720">1 month</option>
+                            <option value="1440">2 months</option>
+                            <option value="2160">3 months</option>
+                            <option value="4320">6 months</option>
+                            <option value="8760">1 year</option>
+                          </select>
+                          <Button onClick={handleExtendPanel} className="bg-success hover:bg-success/90">
+                            <Calendar className="w-4 h-4 mr-1" />
+                            Extend
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        {managedPanel.status === 'running' && (
+                          <Button variant="outline" onClick={handleStopPanel} className="flex-1">
+                            <X className="w-4 h-4 mr-1" />
+                            Stop Panel
+                          </Button>
+                        )}
+                        <Button variant="destructive" onClick={handleDeletePanel} className="flex-1">
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          Delete Panel
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Codes Tab */}
