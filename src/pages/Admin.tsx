@@ -31,6 +31,7 @@ import {
   Plus,
   Calendar,
   Settings,
+  DollarSign,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -108,6 +109,30 @@ interface ManagedPanel {
   user_email?: string;
 }
 
+interface Transaction {
+  id: string;
+  user_id: string;
+  plan_id: string | null;
+  amount: number;
+  currency: string;
+  status: string;
+  paystack_reference: string | null;
+  created_at: string;
+  user_email?: string;
+  plan_name?: string;
+}
+
+interface Plan {
+  id: string;
+  name: string;
+  price: number;
+  panels_count: number;
+  duration_days: number;
+  description: string | null;
+  is_popular: boolean;
+  is_active: boolean;
+}
+
 interface Stats {
   totalUsers: number;
   premiumUsers: number;
@@ -117,6 +142,8 @@ interface Stats {
   bannedUsers: number;
   activeCodesCount: number;
   totalRedemptions: number;
+  totalRevenue: number;
+  transactionsCount: number;
 }
 
 const Admin = () => {
@@ -133,7 +160,12 @@ const Admin = () => {
     bannedUsers: 0,
     activeCodesCount: 0,
     totalRedemptions: 0,
+    totalRevenue: 0,
+    transactionsCount: 0,
   });
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [actionUser, setActionUser] = useState<User | null>(null);
@@ -209,6 +241,31 @@ const Admin = () => {
       setRedeemCodes(codesData as RedeemCode[]);
     }
 
+    // Fetch transactions
+    const { data: txData } = await supabase
+      .from('transactions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (txData) {
+      // Enrich with user emails and plan names
+      const enrichedTx = await Promise.all(
+        (txData as Transaction[]).map(async (tx) => {
+          const [profileRes, planRes] = await Promise.all([
+            supabase.from('profiles').select('email').eq('id', tx.user_id).maybeSingle(),
+            tx.plan_id ? supabase.from('plans').select('name').eq('id', tx.plan_id).maybeSingle() : Promise.resolve({ data: null }),
+          ]);
+          return {
+            ...tx,
+            user_email: profileRes.data?.email,
+            plan_name: planRes.data?.name,
+          };
+        })
+      );
+      setTransactions(enrichedTx);
+    }
+
     // Fetch stats
     const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
     const { count: premiumUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('premium_status', 'approved');
@@ -218,6 +275,15 @@ const Admin = () => {
     const { count: bannedUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_banned', true);
     const { count: activeCodesCount } = await supabase.from('redeem_codes').select('*', { count: 'exact', head: true }).eq('is_active', true);
     const { count: totalRedemptions } = await supabase.from('code_redemptions').select('*', { count: 'exact', head: true });
+    const { count: transactionsCount } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'success');
+
+    // Calculate total revenue
+    const { data: successfulTx } = await supabase
+      .from('transactions')
+      .select('amount')
+      .eq('status', 'success');
+    
+    const totalRevenue = (successfulTx || []).reduce((sum, tx) => sum + (tx.amount || 0), 0);
 
     setStats({
       totalUsers: totalUsers || 0,
@@ -228,7 +294,19 @@ const Admin = () => {
       bannedUsers: bannedUsers || 0,
       activeCodesCount: activeCodesCount || 0,
       totalRedemptions: totalRedemptions || 0,
+      totalRevenue,
+      transactionsCount: transactionsCount || 0,
     });
+
+    // Fetch plans
+    const { data: plansData } = await supabase
+      .from('plans')
+      .select('*')
+      .order('sort_order', { ascending: true });
+
+    if (plansData) {
+      setPlans(plansData as Plan[]);
+    }
 
     setLoading(false);
   };
@@ -359,6 +437,31 @@ const Admin = () => {
     await supabase.from('redeem_codes').update({ is_active: !code.is_active }).eq('id', code.id);
     toast({ title: code.is_active ? 'Deactivated' : 'Activated' });
     fetchData();
+  };
+
+  const handleUpdatePlan = async () => {
+    if (!editingPlan) return;
+
+    const { error } = await supabase
+      .from('plans')
+      .update({
+        name: editingPlan.name,
+        price: editingPlan.price,
+        panels_count: editingPlan.panels_count,
+        duration_days: editingPlan.duration_days,
+        description: editingPlan.description,
+        is_popular: editingPlan.is_popular,
+        is_active: editingPlan.is_active,
+      })
+      .eq('id', editingPlan.id);
+
+    if (error) {
+      toast({ title: 'Error', description: 'Failed to update plan', variant: 'destructive' });
+    } else {
+      toast({ title: 'Updated', description: 'Plan updated successfully' });
+      fetchData();
+    }
+    setEditingPlan(null);
   };
 
   const handleSearchPanel = async () => {
@@ -560,7 +663,7 @@ const Admin = () => {
         </div>
 
         {/* Secondary Stats */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card className="bg-muted/30 border-border">
             <CardContent className="p-3 text-center">
               <p className="text-lg font-mono font-bold text-warning">{stats.pendingRequests}</p>
@@ -579,11 +682,17 @@ const Admin = () => {
               <p className="text-xs text-muted-foreground">Redemptions</p>
             </CardContent>
           </Card>
+          <Card className="bg-success/10 border-success/30">
+            <CardContent className="p-3 text-center">
+              <p className="text-lg font-mono font-bold text-success">₦{(stats.totalRevenue / 100).toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Total Revenue</p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Tabs */}
         <Tabs defaultValue="requests" className="space-y-4">
-          <TabsList className="w-full grid grid-cols-4 h-auto">
+          <TabsList className="w-full grid grid-cols-5 h-auto">
             <TabsTrigger value="requests" className="font-mono text-xs py-2 relative">
               Requests
               {requests.length > 0 && (
@@ -593,6 +702,7 @@ const Admin = () => {
             <TabsTrigger value="users" className="font-mono text-xs py-2">Users</TabsTrigger>
             <TabsTrigger value="panels" className="font-mono text-xs py-2">Panels</TabsTrigger>
             <TabsTrigger value="codes" className="font-mono text-xs py-2">Codes</TabsTrigger>
+            <TabsTrigger value="finance" className="font-mono text-xs py-2">Finance</TabsTrigger>
           </TabsList>
 
           {/* Requests Tab */}
@@ -881,6 +991,164 @@ const Admin = () => {
               ))
             )}
           </TabsContent>
+
+          {/* Finance Tab */}
+          <TabsContent value="finance" className="space-y-4">
+            {/* Revenue Summary */}
+            <div className="grid grid-cols-2 gap-3">
+              <Card className="bg-success/10 border-success/30">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-success/20 flex items-center justify-center">
+                      <DollarSign className="w-6 h-6 text-success" />
+                    </div>
+                    <div>
+                      <p className="text-3xl font-mono font-bold text-success">
+                        ₦{(stats.totalRevenue / 100).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground font-mono">Total Revenue</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-primary/10 border-primary/30">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-primary/20 flex items-center justify-center">
+                      <TrendingUp className="w-6 h-6 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-3xl font-mono font-bold text-primary">
+                        {stats.transactionsCount}
+                      </p>
+                      <p className="text-xs text-muted-foreground font-mono">Successful Txns</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Transactions List */}
+            <Card>
+              <CardContent className="p-4">
+                <h3 className="font-mono font-bold mb-4 flex items-center gap-2">
+                  <Activity className="w-4 h-4" />
+                  Recent Transactions
+                </h3>
+                {transactions.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <DollarSign className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p className="font-mono">No transactions yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {transactions.map((tx) => (
+                      <div
+                        key={tx.id}
+                        className={`p-3 rounded-lg border ${
+                          tx.status === 'success'
+                            ? 'border-success/30 bg-success/5'
+                            : tx.status === 'pending'
+                            ? 'border-warning/30 bg-warning/5'
+                            : 'border-destructive/30 bg-destructive/5'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-mono text-sm font-medium text-foreground truncate">
+                                {tx.user_email || 'Unknown User'}
+                              </p>
+                              <Badge
+                                variant={tx.status === 'success' ? 'default' : 'secondary'}
+                                className={`text-xs ${
+                                  tx.status === 'success'
+                                    ? 'bg-success text-success-foreground'
+                                    : tx.status === 'pending'
+                                    ? 'bg-warning text-warning-foreground'
+                                    : 'bg-destructive text-destructive-foreground'
+                                }`}
+                              >
+                                {tx.status.toUpperCase()}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                              <span>{tx.plan_name || 'Unknown Plan'}</span>
+                              <span>•</span>
+                              <span>{new Date(tx.created_at).toLocaleDateString()}</span>
+                              {tx.paystack_reference && (
+                                <>
+                                  <span>•</span>
+                                  <span className="font-mono">{tx.paystack_reference.slice(0, 15)}...</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className={`font-mono font-bold ${
+                              tx.status === 'success' ? 'text-success' : 'text-muted-foreground'
+                            }`}>
+                              ₦{(tx.amount / 100).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Plans Management */}
+            <Card>
+              <CardContent className="p-4">
+                <h3 className="font-mono font-bold mb-4 flex items-center gap-2">
+                  <Settings className="w-4 h-4" />
+                  Manage Plans
+                </h3>
+                <div className="space-y-3">
+                  {plans.map((plan) => (
+                    <div
+                      key={plan.id}
+                      className={`p-4 rounded-lg border ${
+                        plan.is_active ? 'border-primary/30 bg-primary/5' : 'border-muted bg-muted/30 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-mono font-bold text-foreground">{plan.name}</p>
+                            {plan.is_popular && (
+                              <Badge className="bg-warning text-warning-foreground text-xs">Popular</Badge>
+                            )}
+                            {!plan.is_active && (
+                              <Badge variant="secondary" className="text-xs">Inactive</Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
+                            <span className="font-mono font-bold text-primary">
+                              ₦{(plan.price / 100).toLocaleString()}
+                            </span>
+                            <span>•</span>
+                            <span>{plan.panels_count} panel{plan.panels_count > 1 ? 's' : ''}</span>
+                            <span>•</span>
+                            <span>{Math.floor(plan.duration_days / 30)} month{Math.floor(plan.duration_days / 30) > 1 ? 's' : ''}</span>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditingPlan(plan)}
+                        >
+                          Edit
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </main>
 
@@ -990,6 +1258,99 @@ const Admin = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Plan Dialog */}
+      <Dialog open={!!editingPlan} onOpenChange={() => setEditingPlan(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5 text-primary" />
+              Edit Plan
+            </DialogTitle>
+          </DialogHeader>
+          {editingPlan && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Plan Name</label>
+                <Input
+                  value={editingPlan.name}
+                  onChange={(e) => setEditingPlan({ ...editingPlan, name: e.target.value })}
+                  className="font-mono"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Price (in Kobo)</label>
+                <Input
+                  type="number"
+                  value={editingPlan.price}
+                  onChange={(e) => setEditingPlan({ ...editingPlan, price: parseInt(e.target.value) || 0 })}
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  = ₦{(editingPlan.price / 100).toLocaleString()}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Panels Count</label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={editingPlan.panels_count}
+                    onChange={(e) => setEditingPlan({ ...editingPlan, panels_count: parseInt(e.target.value) || 1 })}
+                    className="font-mono"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Duration (Days)</label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={editingPlan.duration_days}
+                    onChange={(e) => setEditingPlan({ ...editingPlan, duration_days: parseInt(e.target.value) || 30 })}
+                    className="font-mono"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Description</label>
+                <Input
+                  value={editingPlan.description || ''}
+                  onChange={(e) => setEditingPlan({ ...editingPlan, description: e.target.value })}
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={editingPlan.is_popular}
+                    onChange={(e) => setEditingPlan({ ...editingPlan, is_popular: e.target.checked })}
+                    className="rounded border-gray-300"
+                  />
+                  Mark as Popular
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={editingPlan.is_active}
+                    onChange={(e) => setEditingPlan({ ...editingPlan, is_active: e.target.checked })}
+                    className="rounded border-gray-300"
+                  />
+                  Active
+                </label>
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button variant="outline" onClick={() => setEditingPlan(null)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleUpdatePlan} className="bg-primary hover:bg-primary/90">
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

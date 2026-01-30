@@ -11,7 +11,6 @@ import {
   Server,
   Plus,
   LogOut,
-  Crown,
   Shield,
   Loader2,
   Play,
@@ -24,10 +23,8 @@ import {
   Gift,
   Ticket,
   ShoppingCart,
-  ExternalLink,
 } from 'lucide-react';
 import { CreatePanelDialog } from '@/components/CreatePanelDialog';
-import { RequestPremiumDialog } from '@/components/RequestPremiumDialog';
 import {
   Dialog,
   DialogContent,
@@ -58,8 +55,6 @@ const Dashboard = () => {
   const [panels, setPanels] = useState<Panel[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [showPremiumDialog, setShowPremiumDialog] = useState(false);
-  const [showBuyDialog, setShowBuyDialog] = useState(false);
   const [redeemCode, setRedeemCode] = useState('');
   const [redeeming, setRedeeming] = useState(false);
   const [setupPanel, setSetupPanel] = useState<SetupPanelData | null>(null);
@@ -337,46 +332,35 @@ const Dashboard = () => {
               <span className="text-xs text-muted-foreground font-mono uppercase">Plan</span>
             </div>
             <p className="text-sm font-mono font-bold">
-              {isPremium ? (
-                <span className="text-warning">PRO</span>
-              ) : (
-                <span className="text-muted-foreground">FREE</span>
-              )}
+              <span className={isPremium ? "text-warning" : "text-muted-foreground"}>
+                {isPremium ? 'PREMIUM' : 'FREE'}
+              </span>
             </p>
           </div>
         </div>
 
-        {/* Premium Banner - only show for non-premium users */}
-        {!isPremium && (
-          <div className="relative overflow-hidden rounded-xl border border-primary/30 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 p-4">
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(34,197,94,0.03)_50%,transparent_100%)] animate-pulse" />
-            <div className="relative flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                  <Crown className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="font-mono font-semibold text-foreground">Upgrade to Premium</p>
-                  <p className="text-xs text-muted-foreground">Unlock panel hosting capabilities</p>
-                </div>
+        {/* Buy Panel Button - Primary CTA */}
+        <div className="relative overflow-hidden rounded-xl border border-primary/30 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 p-4">
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(34,197,94,0.03)_50%,transparent_100%)] animate-pulse" />
+          <div className="relative flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                <ShoppingCart className="w-5 h-5 text-primary" />
               </div>
-              {profile?.premium_status === 'pending' ? (
-                <Badge variant="secondary" className="font-mono">
-                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                  PENDING
-                </Badge>
-              ) : (
-                <Button 
-                  size="sm" 
-                  onClick={() => setShowPremiumDialog(true)}
-                  className="font-mono bg-primary hover:bg-primary/90"
-                >
-                  Request
-                </Button>
-              )}
+              <div>
+                <p className="font-mono font-semibold text-foreground">Purchase Panels</p>
+                <p className="text-xs text-muted-foreground">Get hosting panels with instant activation</p>
+              </div>
             </div>
+            <Button 
+              size="sm" 
+              onClick={() => navigate('/pricing')}
+              className="font-mono bg-primary hover:bg-primary/90"
+            >
+              Buy Now
+            </Button>
           </div>
-        )}
+        </div>
 
         {/* Redeem Code Input - Available for ALL users */}
         <div className="rounded-xl border border-accent/30 bg-accent/5 p-4">
@@ -403,29 +387,6 @@ const Dashboard = () => {
               className="bg-accent hover:bg-accent/90"
             >
               {redeeming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Gift className="w-4 h-4" />}
-            </Button>
-          </div>
-        </div>
-
-        {/* Buy Redeem Code */}
-        <div className="rounded-xl border border-warning/30 bg-warning/5 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-warning/20 flex items-center justify-center">
-                <ShoppingCart className="w-5 h-5 text-warning" />
-              </div>
-              <div>
-                <p className="font-mono font-semibold text-foreground">Buy Redeem Code</p>
-                <p className="text-xs text-muted-foreground">Purchase panel slots directly</p>
-              </div>
-            </div>
-            <Button 
-              size="sm"
-              variant="outline"
-              onClick={() => setShowBuyDialog(true)}
-              className="font-mono border-warning/30 hover:bg-warning/10"
-            >
-              Buy Now
             </Button>
           </div>
         </div>
@@ -460,7 +421,7 @@ const Dashboard = () => {
               <p className="text-sm text-muted-foreground mb-4">
                 {isPremium 
                   ? 'Create your first panel to start hosting'
-                  : 'Get premium to create panels'}
+                  : 'Purchase a plan to get started'}
               </p>
               {isPremium ? (
                 <Button
@@ -472,12 +433,11 @@ const Dashboard = () => {
                 </Button>
               ) : (
                 <Button
-                  variant="outline"
-                  onClick={() => setShowPremiumDialog(true)}
-                  className="font-mono"
+                  onClick={() => navigate('/pricing')}
+                  className="font-mono bg-primary hover:bg-primary/90"
                 >
-                  <Crown className="w-4 h-4 mr-1" />
-                  Request Premium
+                  <ShoppingCart className="w-4 h-4 mr-1" />
+                  Buy Panels
                 </Button>
               )}
             </div>
@@ -555,43 +515,6 @@ const Dashboard = () => {
         onOpenChange={setShowCreateDialog}
         onCreated={fetchPanels}
       />
-
-      <RequestPremiumDialog
-        open={showPremiumDialog}
-        onOpenChange={setShowPremiumDialog}
-      />
-
-      {/* Buy Redeem Code Dialog */}
-      <Dialog open={showBuyDialog} onOpenChange={setShowBuyDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ShoppingCart className="w-5 h-5 text-warning" />
-              Buy Redeem Code
-            </DialogTitle>
-            <DialogDescription>
-              Contact admin to purchase panel slots
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="bg-muted/50 rounded-lg p-4 text-center">
-              <p className="text-2xl font-mono font-bold text-warning">$1</p>
-              <p className="text-sm text-muted-foreground">Per Panel / 1 Month</p>
-            </div>
-            <div className="text-sm text-muted-foreground text-center">
-              <p>Get instant access to premium hosting by purchasing a redeem code from the admin.</p>
-            </div>
-            <Button 
-              className="w-full font-mono bg-primary hover:bg-primary/90"
-              onClick={() => window.open('https://t.me/theidledeveloper', '_blank')}
-            >
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Contact Admin on Telegram
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* Setup Claimed Panel Dialog */}
       <Dialog open={!!setupPanel} onOpenChange={(open) => !open && setSetupPanel(null)}>
         <DialogContent className="sm:max-w-md">
