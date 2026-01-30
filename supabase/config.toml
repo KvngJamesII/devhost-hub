@@ -2,3 +2,6 @@ project_id = "gldbirnupmvubnhrurbq"
 
 [functions.vm-proxy]
 verify_jwt = false
+
+[functions.paystack]
+verify_jwt = false
