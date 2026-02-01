@@ -3,10 +3,13 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
-import { vmApi } from '@/lib/vmApi';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Terminal as TerminalIcon, Wifi, WifiOff, Maximize2 } from 'lucide-react';
+
+// AWS Premium Backend WebSocket URL
+const PREMIUM_WS_URL = 'ws://56.228.75.32:3002';
+const PREMIUM_API_KEY = 'idev-premium-secret-key-2026';
 
 interface PremiumTerminalProps {
   panelId: string;
@@ -21,6 +24,7 @@ export function PremiumTerminal({ panelId, isPremiumUser }: PremiumTerminalProps
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
     if (!terminalRef.current || !isPremiumUser) return;
@@ -92,8 +96,13 @@ export function PremiumTerminal({ panelId, isPremiumUser }: PremiumTerminalProps
     term.writeln('\x1b[1;32m║\x1b[0m  \x1b[90mFull interactive shell access\x1b[0m               \x1b[1;32m║\x1b[0m');
     term.writeln('\x1b[1;32m╚══════════════════════════════════════════════╝\x1b[0m');
     term.writeln('');
-    term.writeln('\x1b[33mClick "Connect" to start your terminal session.\x1b[0m');
+    term.writeln('\x1b[33mConnecting automatically...\x1b[0m');
     term.writeln('');
+
+    // Auto-connect after terminal is ready
+    setTimeout(() => {
+      connectTerminal();
+    }, 500);
 
     return () => {
       window.removeEventListener('resize', handleResize);
@@ -109,21 +118,13 @@ export function PremiumTerminal({ panelId, isPremiumUser }: PremiumTerminalProps
     setError(null);
 
     try {
-      // Get WebSocket URL from backend
-      const wsInfo = await vmApi.getTerminalWsInfo(panelId);
-      
-      if (!wsInfo.isPremium || !wsInfo.wsUrl) {
-        setError(wsInfo.message || 'Premium terminal not available');
-        setConnecting(false);
-        return;
-      }
-
       const term = xtermRef.current;
       term.clear();
       term.writeln('\x1b[33mConnecting to terminal...\x1b[0m');
 
-      // Connect WebSocket
-      const ws = new WebSocket(wsInfo.wsUrl);
+      // Connect directly to AWS WebSocket
+      const wsUrl = `${PREMIUM_WS_URL}/terminal/${panelId}?apiKey=${PREMIUM_API_KEY}`;
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
