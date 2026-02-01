@@ -51,7 +51,7 @@ serve(async (req) => {
         throw new Error('Failed to create transaction record');
       }
 
-      // Initialize Paystack payment
+      // Initialize Paystack payment with bank transfer only
       const paystackResponse = await fetch('https://api.paystack.co/transaction/initialize', {
         method: 'POST',
         headers: {
@@ -63,6 +63,7 @@ serve(async (req) => {
           amount, // Amount in kobo
           reference,
           callback_url,
+          channels: ['bank_transfer'], // Only show bank transfer option
           metadata: {
             user_id,
             plan_id,
