@@ -28,7 +28,7 @@ serve(async (req) => {
 
     if (action === 'initialize') {
       // Initialize a payment
-      const { email, amount, plan_id, user_id, callback_url } = params;
+      const { email, amount, plan_id, user_id, callback_url, renewal_panel_id, renewal_months } = params;
 
       if (!email || !amount || !plan_id || !user_id) {
         throw new Error('Missing required parameters: email, amount, plan_id, user_id');
@@ -36,14 +36,19 @@ serve(async (req) => {
 
       const reference = `idev_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-      // Create transaction record
+      // Create transaction record with renewal info if applicable
       const { error: txError } = await supabase.from('transactions').insert({
         user_id,
         plan_id,
         amount,
         paystack_reference: reference,
         status: 'pending',
-        metadata: { email, callback_url },
+        metadata: { 
+          email, 
+          callback_url,
+          renewal_panel_id: renewal_panel_id || null,
+          renewal_months: renewal_months || null,
+        },
       });
 
       if (txError) {
@@ -67,6 +72,8 @@ serve(async (req) => {
           metadata: {
             user_id,
             plan_id,
+            renewal_panel_id: renewal_panel_id || null,
+            renewal_months: renewal_months || null,
           },
         }),
       });
@@ -146,6 +153,49 @@ serve(async (req) => {
           updated_at: new Date().toISOString(),
         }).eq('id', transaction.id);
 
+        // Check if this is a renewal
+        const metadata = transaction.metadata as any;
+        const renewalPanelId = metadata?.renewal_panel_id;
+        const renewalMonths = metadata?.renewal_months;
+
+        if (renewalPanelId && renewalMonths) {
+          // This is a panel renewal - extend the panel's expiry
+          const { data: panelData, error: panelError } = await supabase
+            .from('panels')
+            .select('expires_at')
+            .eq('id', renewalPanelId)
+            .single();
+
+          if (panelError || !panelData) {
+            throw new Error('Panel not found for renewal');
+          }
+
+          // Calculate new expiry date
+          const currentExpiry = panelData.expires_at ? new Date(panelData.expires_at) : new Date();
+          const now = new Date();
+          
+          // If panel is expired, start from now; otherwise add to current expiry
+          const baseDate = currentExpiry < now ? now : currentExpiry;
+          const newExpiry = new Date(baseDate);
+          newExpiry.setMonth(newExpiry.getMonth() + renewalMonths);
+
+          await supabase.from('panels').update({
+            expires_at: newExpiry.toISOString(),
+          }).eq('id', renewalPanelId);
+
+          console.log(`Extended panel ${renewalPanelId} by ${renewalMonths} months to ${newExpiry.toISOString()}`);
+
+          return new Response(JSON.stringify({
+            success: true,
+            status: 'success',
+            message: `Panel renewed! +${renewalMonths} month(s) added.`,
+            new_expiry: newExpiry.toISOString(),
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Regular purchase flow - create new panels
         const plan = transaction.plans;
         if (!plan) {
           throw new Error('Plan not found for transaction');

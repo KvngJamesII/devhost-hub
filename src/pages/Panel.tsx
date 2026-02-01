@@ -29,6 +29,7 @@ import { FileManager } from '@/components/panel/FileManager';
 import { UnifiedConsole } from '@/components/panel/UnifiedConsole';
 import { StartupSettings } from '@/components/panel/StartupSettings';
 import { PanelSettings } from '@/components/panel/PanelSettings';
+import { RenewalWarning } from '@/components/panel/RenewalWarning';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -354,6 +355,9 @@ const PanelPage = () => {
           {getStatusBadge(effectiveStatus)}
         </div>
       </header>
+
+      {/* Renewal Warning */}
+      <RenewalWarning panelId={panel.id} expiresAt={panel.expires_at ?? null} />
 
       {/* Action Bar */}
       <div className="px-4 py-3 border-b border-border bg-card/50">
