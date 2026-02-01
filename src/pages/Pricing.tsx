@@ -3,36 +3,32 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import {
   Terminal,
   ArrowLeft,
   Check,
   Loader2,
-  Zap,
-  Crown,
-  Star,
-  Sparkles,
   MessageCircle,
+  Minus,
+  Plus,
+  Server,
+  Calendar,
 } from 'lucide-react';
 
-interface Plan {
+interface PriceConfig {
   id: string;
-  name: string;
-  price: number;
-  panels_count: number;
-  duration_days: number;
-  description: string | null;
-  features: string[] | null;
-  is_popular: boolean;
+  price: number; // price per panel per month in kobo
 }
 
 const Pricing = () => {
   const { user, loading: authLoading } = useAuth();
-  const [plans, setPlans] = useState<Plan[]>([]);
+  const [priceConfig, setPriceConfig] = useState<PriceConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  const [purchasing, setPurchasing] = useState<string | null>(null);
+  const [purchasing, setPurchasing] = useState(false);
+  const [panelCount, setPanelCount] = useState(1);
+  const [months, setMonths] = useState(1);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -44,7 +40,7 @@ const Pricing = () => {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    fetchPlans();
+    fetchPriceConfig();
   }, []);
 
   // Check for payment callback
@@ -57,28 +53,31 @@ const Pricing = () => {
     }
   }, [searchParams]);
 
-  const fetchPlans = async () => {
+  const fetchPriceConfig = async () => {
+    // Get the first active plan which holds our price per panel per month
     const { data, error } = await supabase
       .from('plans')
-      .select('*')
+      .select('id, price')
       .eq('is_active', true)
-      .order('sort_order', { ascending: true });
+      .order('sort_order', { ascending: true })
+      .limit(1)
+      .single();
 
     if (error) {
-      console.error('Error fetching plans:', error);
+      console.error('Error fetching price config:', error);
       toast({
         title: 'Error',
-        description: 'Failed to load pricing plans',
+        description: 'Failed to load pricing',
         variant: 'destructive',
       });
     } else {
-      setPlans(data as Plan[]);
+      setPriceConfig(data as PriceConfig);
     }
     setLoading(false);
   };
 
   const verifyPayment = async (reference: string) => {
-    setPurchasing('verifying');
+    setPurchasing(true);
     
     try {
       const { data, error } = await supabase.functions.invoke('paystack', {
@@ -113,28 +112,31 @@ const Pricing = () => {
       navigate('/pricing', { replace: true });
     }
     
-    setPurchasing(null);
+    setPurchasing(false);
   };
 
-  const handlePurchase = async (plan: Plan) => {
-    if (!user) {
+  const handlePurchase = async () => {
+    if (!user || !priceConfig) {
       navigate('/auth?redirect=/pricing');
       return;
     }
 
-    setPurchasing(plan.id);
+    setPurchasing(true);
 
     try {
+      const totalAmount = priceConfig.price * panelCount * months;
       const callback_url = `${window.location.origin}/pricing`;
 
       const { data, error } = await supabase.functions.invoke('paystack', {
         body: {
           action: 'initialize',
           email: user.email,
-          amount: plan.price,
-          plan_id: plan.id,
+          amount: totalAmount,
+          plan_id: priceConfig.id,
           user_id: user.id,
           callback_url,
+          panels_count: panelCount,
+          duration_months: months,
         },
       });
 
@@ -153,7 +155,7 @@ const Pricing = () => {
         description: error.message || 'Failed to initiate payment',
         variant: 'destructive',
       });
-      setPurchasing(null);
+      setPurchasing(false);
     }
   };
 
@@ -165,24 +167,20 @@ const Pricing = () => {
     }).format(priceInKobo / 100);
   };
 
-  const getPlanIcon = (index: number) => {
-    const icons = [Zap, Crown, Star];
-    const Icon = icons[index] || Sparkles;
-    return <Icon className="w-6 h-6" />;
-  };
+  const totalAmount = priceConfig ? priceConfig.price * panelCount * months : 0;
 
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <Terminal className="w-12 h-12 mx-auto text-primary animate-pulse mb-4" />
-          <p className="text-muted-foreground font-mono text-sm">Loading plans...</p>
+          <p className="text-muted-foreground font-mono text-sm">Loading...</p>
         </div>
       </div>
     );
   }
 
-  if (purchasing === 'verifying') {
+  if (purchasing && searchParams.get('reference')) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
@@ -208,143 +206,253 @@ const Pricing = () => {
               <Terminal className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h1 className="font-mono font-bold text-lg text-foreground">Purchase Panels</h1>
+              <h1 className="font-mono font-bold text-lg text-foreground">Buy Panels</h1>
               <p className="text-xs text-muted-foreground font-mono">
-                Choose a plan that suits your needs
+                Get hosting panels for your apps
               </p>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="p-4 pb-24">
+      <main className="p-4 pb-24 max-w-lg mx-auto">
         {/* Hero Section */}
-        <div className="text-center mb-8 mt-4">
+        <div className="text-center mb-6 mt-4">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded border border-primary/30 bg-primary/5 font-mono text-sm text-primary mb-4">
             <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
             Secure Payments via Paystack
           </div>
-          <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
+          <h2 className="text-2xl font-bold text-foreground mb-2">
             Simple, Transparent Pricing
           </h2>
-          <p className="text-muted-foreground max-w-md mx-auto">
-            Get instant access to premium panel hosting. No hidden fees, no surprises.
+          <p className="text-muted-foreground">
+            Pay only for what you need. No hidden fees.
           </p>
         </div>
 
-        {/* Plans Grid */}
-        <div className="grid gap-6 md:grid-cols-3 max-w-4xl mx-auto">
-          {plans.map((plan, index) => (
-            <div
-              key={plan.id}
-              className={`relative rounded-2xl border-2 p-6 transition-all hover:scale-[1.02] ${
-                plan.is_popular
-                  ? 'border-primary bg-gradient-to-b from-primary/10 to-transparent shadow-lg shadow-primary/10'
-                  : 'border-border bg-card hover:border-primary/50'
-              }`}
-            >
-              {plan.is_popular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge className="bg-primary text-primary-foreground font-mono">
-                    <Star className="w-3 h-3 mr-1" />
-                    MOST POPULAR
-                  </Badge>
-                </div>
-              )}
-
-              <div className="text-center mb-6">
-                <div className={`w-14 h-14 mx-auto rounded-xl flex items-center justify-center mb-4 ${
-                  plan.is_popular
-                    ? 'bg-primary/20 text-primary'
-                    : 'bg-muted text-muted-foreground'
-                }`}>
-                  {getPlanIcon(index)}
-                </div>
-                <h3 className="font-mono font-bold text-xl text-foreground mb-1">
-                  {plan.name}
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  {plan.description}
+        {priceConfig && (
+          <>
+            {/* Panel Count Selector */}
+            <Card className="mb-4">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-mono flex items-center gap-2">
+                  <Server className="w-4 h-4" />
+                  Number of Panels
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                  How many hosting panels do you need?
                 </p>
-              </div>
 
-              <div className="text-center mb-6">
-                <div className="text-4xl font-mono font-bold text-foreground">
-                  {formatPrice(plan.price)}
-                </div>
-                <p className="text-sm text-muted-foreground font-mono">
-                  one-time payment
-                </p>
-              </div>
-
-              <div className="space-y-3 mb-6">
-                <div className="flex items-center gap-2 text-sm">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span className="text-foreground font-medium">
-                    {plan.panels_count} Panel{plan.panels_count > 1 ? 's' : ''}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  <span className="text-foreground font-medium">
-                    {Math.floor(plan.duration_days / 30)} Month{Math.floor(plan.duration_days / 30) > 1 ? 's' : ''} Expiry
-                  </span>
-                </div>
-                {plan.features?.map((feature, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm">
-                    <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span className="text-muted-foreground">{feature}</span>
+                <div className="flex items-center justify-center gap-4 mb-4">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setPanelCount(Math.max(1, panelCount - 1))}
+                    disabled={panelCount <= 1}
+                  >
+                    <Minus className="w-4 h-4" />
+                  </Button>
+                  
+                  <div className="text-center min-w-[100px]">
+                    <span className="text-4xl font-mono font-bold text-foreground">
+                      {panelCount}
+                    </span>
+                    <p className="text-sm text-muted-foreground">
+                      panel{panelCount > 1 ? 's' : ''}
+                    </p>
                   </div>
-                ))}
-              </div>
 
-              <Button
-                className="w-full font-mono bg-primary hover:bg-primary/90 text-primary-foreground"
-                onClick={() => handlePurchase(plan)}
-                disabled={!!purchasing}
-              >
-                {purchasing === plan.id ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  'Purchase Now'
-                )}
-              </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setPanelCount(Math.min(10, panelCount + 1))}
+                    disabled={panelCount >= 10}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
 
-              {/* Value indicator for popular plan */}
-              {plan.is_popular && (
-                <p className="text-center text-xs text-primary font-mono mt-3">
-                  ✨ Best value per panel
+                {/* Quick Select for Panels */}
+                <div className="flex gap-2 justify-center flex-wrap">
+                  {[1, 2, 3, 5, 10].map((p) => (
+                    <Button
+                      key={p}
+                      variant={panelCount === p ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setPanelCount(p)}
+                      className="font-mono"
+                    >
+                      {p}
+                    </Button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Duration Selector */}
+            <Card className="mb-4">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-mono flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  Duration
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                  How long do you want to host?
                 </p>
+
+                <div className="flex items-center justify-center gap-4 mb-4">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setMonths(Math.max(1, months - 1))}
+                    disabled={months <= 1}
+                  >
+                    <Minus className="w-4 h-4" />
+                  </Button>
+                  
+                  <div className="text-center min-w-[100px]">
+                    <span className="text-4xl font-mono font-bold text-foreground">
+                      {months}
+                    </span>
+                    <p className="text-sm text-muted-foreground">
+                      month{months > 1 ? 's' : ''}
+                    </p>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setMonths(Math.min(12, months + 1))}
+                    disabled={months >= 12}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                {/* Quick Select for Months */}
+                <div className="flex gap-2 justify-center flex-wrap">
+                  {[1, 3, 6, 12].map((m) => (
+                    <Button
+                      key={m}
+                      variant={months === m ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setMonths(m)}
+                      className="font-mono"
+                    >
+                      {m} mo
+                    </Button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Price Summary */}
+            <Card className="mb-6">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-mono">Price Summary</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="p-4 rounded-lg bg-muted/50 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Price per panel/month</span>
+                    <span className="font-mono">{formatPrice(priceConfig.price)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Panels</span>
+                    <span className="font-mono">× {panelCount}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Duration</span>
+                    <span className="font-mono">× {months} month{months > 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="h-px bg-border my-2" />
+                  <div className="flex justify-between">
+                    <span className="font-medium">Total</span>
+                    <span className="text-2xl font-mono font-bold text-primary">
+                      {formatPrice(totalAmount)}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* What You Get */}
+            <Card className="mb-6">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-mono">What you get</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <Check className="w-4 h-4 text-success" />
+                  <span>{panelCount} hosting panel{panelCount > 1 ? 's' : ''}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Check className="w-4 h-4 text-success" />
+                  <span>{months} month{months > 1 ? 's' : ''} validity</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Check className="w-4 h-4 text-success" />
+                  <span>Node.js & Python support</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Check className="w-4 h-4 text-success" />
+                  <span>24/7 uptime hosting</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Check className="w-4 h-4 text-success" />
+                  <span>Instant activation</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Purchase Button */}
+            <Button
+              className="w-full h-12 font-mono text-lg bg-gradient-primary hover:opacity-90"
+              onClick={handlePurchase}
+              disabled={purchasing}
+            >
+              {purchasing ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  Pay {formatPrice(totalAmount)}
+                </>
               )}
-            </div>
-          ))}
-        </div>
+            </Button>
+
+            <p className="text-xs text-center text-muted-foreground mt-4">
+              Secure payment via Paystack (Bank Transfer)
+            </p>
+          </>
+        )}
 
         {/* Trust indicators */}
-        <div className="mt-12 text-center">
-          <div className="inline-flex items-center gap-6 px-6 py-3 rounded-xl bg-card border border-border">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Check className="w-4 h-4 text-success" />
+        <div className="mt-8 text-center">
+          <div className="inline-flex items-center gap-4 px-4 py-2 rounded-xl bg-card border border-border text-xs flex-wrap justify-center">
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Check className="w-3 h-3 text-success" />
               <span>Instant Activation</span>
             </div>
-            <div className="w-px h-4 bg-border" />
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Check className="w-4 h-4 text-success" />
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Check className="w-3 h-3 text-success" />
               <span>Secure Payment</span>
             </div>
-            <div className="w-px h-4 bg-border" />
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Check className="w-4 h-4 text-success" />
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Check className="w-3 h-3 text-success" />
               <span>24/7 Support</span>
             </div>
           </div>
         </div>
 
-        {/* FAQ or Help */}
-        <div className="mt-8 text-center">
+        {/* Help */}
+        <div className="mt-6 text-center">
           <p className="text-sm text-muted-foreground">
             Need help? Contact us on{' '}
             <a

@@ -180,7 +180,6 @@ const Admin = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [allPanels, setAllPanels] = useState<AllPanel[]>([]);
-  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [actionUser, setActionUser] = useState<User | null>(null);
@@ -461,31 +460,6 @@ const Admin = () => {
     await supabase.from('redeem_codes').update({ is_active: !code.is_active }).eq('id', code.id);
     toast({ title: code.is_active ? 'Deactivated' : 'Activated' });
     fetchData();
-  };
-
-  const handleUpdatePlan = async () => {
-    if (!editingPlan) return;
-
-    const { error } = await supabase
-      .from('plans')
-      .update({
-        name: editingPlan.name,
-        price: editingPlan.price,
-        panels_count: editingPlan.panels_count,
-        duration_days: editingPlan.duration_days,
-        description: editingPlan.description,
-        is_popular: editingPlan.is_popular,
-        is_active: editingPlan.is_active,
-      })
-      .eq('id', editingPlan.id);
-
-    if (error) {
-      toast({ title: 'Error', description: 'Failed to update plan', variant: 'destructive' });
-    } else {
-      toast({ title: 'Updated', description: 'Plan updated successfully' });
-      fetchData();
-    }
-    setEditingPlan(null);
   };
 
   const handleSearchPanel = async () => {
@@ -991,53 +965,66 @@ const Admin = () => {
             {/* Transactions Table */}
             <TransactionsTable transactions={transactions} />
 
-            {/* Plans Management */}
-            <Card>
+            {/* Panel Pricing Settings */}
+            <Card className="border-primary/30">
               <CardContent className="p-4">
                 <h3 className="font-mono font-bold mb-4 flex items-center gap-2">
-                  <Settings className="w-4 h-4" />
-                  Manage Plans
+                  <DollarSign className="w-4 h-4 text-primary" />
+                  Panel Pricing
                 </h3>
-                <div className="space-y-3">
-                  {plans.map((plan) => (
-                    <div
-                      key={plan.id}
-                      className={`p-4 rounded-lg border ${
-                        plan.is_active ? 'border-primary/30 bg-primary/5' : 'border-muted bg-muted/30 opacity-60'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-mono font-bold text-foreground">{plan.name}</p>
-                            {plan.is_popular && (
-                              <Badge className="bg-warning text-warning-foreground text-xs">Popular</Badge>
-                            )}
-                            {!plan.is_active && (
-                              <Badge variant="secondary" className="text-xs">Inactive</Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
-                            <span className="font-mono font-bold text-primary">
-                              ₦{(plan.price / 100).toLocaleString()}
-                            </span>
-                            <span>•</span>
-                            <span>{plan.panels_count} panel{plan.panels_count > 1 ? 's' : ''}</span>
-                            <span>•</span>
-                            <span>{Math.floor(plan.duration_days / 30)} month{Math.floor(plan.duration_days / 30) > 1 ? 's' : ''}</span>
-                          </div>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setEditingPlan(plan)}
+                <p className="text-sm text-muted-foreground mb-4">
+                  Set the price per panel per month. Users will pay this amount multiplied by their chosen quantity and duration.
+                </p>
+                {plans.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-lg bg-muted/50 border border-border">
+                      <label className="text-sm font-medium text-foreground">Price per Panel per Month (Kobo)</label>
+                      <div className="flex gap-2 mt-2">
+                        <Input
+                          type="number"
+                          value={plans[0].price}
+                          onChange={(e) => {
+                            const newPlans = [...plans];
+                            newPlans[0] = { ...newPlans[0], price: parseInt(e.target.value) || 0 };
+                            setPlans(newPlans);
+                          }}
+                          className="font-mono"
+                          placeholder="50000"
+                        />
+                        <Button 
+                          onClick={async () => {
+                            const { error } = await supabase
+                              .from('plans')
+                              .update({ price: plans[0].price })
+                              .eq('id', plans[0].id);
+                            if (error) {
+                              toast({ title: 'Error', description: 'Failed to update price', variant: 'destructive' });
+                            } else {
+                              toast({ title: 'Updated!', description: 'Panel price updated successfully' });
+                            }
+                          }}
+                          className="bg-primary hover:bg-primary/90"
                         >
-                          Edit
+                          Save
                         </Button>
                       </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        = ₦{(plans[0].price / 100).toLocaleString()} per panel per month
+                      </p>
+                      <div className="mt-4 p-3 rounded bg-card border border-border">
+                        <p className="text-xs text-muted-foreground font-mono">Example calculations:</p>
+                        <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+                          <span className="text-muted-foreground">1 panel × 1 month:</span>
+                          <span className="font-mono text-foreground">₦{(plans[0].price / 100).toLocaleString()}</span>
+                          <span className="text-muted-foreground">2 panels × 3 months:</span>
+                          <span className="font-mono text-foreground">₦{(plans[0].price * 2 * 3 / 100).toLocaleString()}</span>
+                          <span className="text-muted-foreground">5 panels × 6 months:</span>
+                          <span className="font-mono text-foreground">₦{(plans[0].price * 5 * 6 / 100).toLocaleString()}</span>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1151,98 +1138,6 @@ const Admin = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Edit Plan Dialog */}
-      <Dialog open={!!editingPlan} onOpenChange={() => setEditingPlan(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Settings className="w-5 h-5 text-primary" />
-              Edit Plan
-            </DialogTitle>
-          </DialogHeader>
-          {editingPlan && (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Plan Name</label>
-                <Input
-                  value={editingPlan.name}
-                  onChange={(e) => setEditingPlan({ ...editingPlan, name: e.target.value })}
-                  className="font-mono"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Price (in Kobo)</label>
-                <Input
-                  type="number"
-                  value={editingPlan.price}
-                  onChange={(e) => setEditingPlan({ ...editingPlan, price: parseInt(e.target.value) || 0 })}
-                  className="font-mono"
-                />
-                <p className="text-xs text-muted-foreground">
-                  = ₦{(editingPlan.price / 100).toLocaleString()}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Panels Count</label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={editingPlan.panels_count}
-                    onChange={(e) => setEditingPlan({ ...editingPlan, panels_count: parseInt(e.target.value) || 1 })}
-                    className="font-mono"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Duration (Days)</label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={editingPlan.duration_days}
-                    onChange={(e) => setEditingPlan({ ...editingPlan, duration_days: parseInt(e.target.value) || 30 })}
-                    className="font-mono"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Description</label>
-                <Input
-                  value={editingPlan.description || ''}
-                  onChange={(e) => setEditingPlan({ ...editingPlan, description: e.target.value })}
-                />
-              </div>
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={editingPlan.is_popular}
-                    onChange={(e) => setEditingPlan({ ...editingPlan, is_popular: e.target.checked })}
-                    className="rounded border-gray-300"
-                  />
-                  Mark as Popular
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={editingPlan.is_active}
-                    onChange={(e) => setEditingPlan({ ...editingPlan, is_active: e.target.checked })}
-                    className="rounded border-gray-300"
-                  />
-                  Active
-                </label>
-              </div>
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="outline" onClick={() => setEditingPlan(null)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleUpdatePlan} className="bg-primary hover:bg-primary/90">
-                  Save Changes
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

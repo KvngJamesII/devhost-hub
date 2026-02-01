@@ -28,7 +28,7 @@ serve(async (req) => {
 
     if (action === 'initialize') {
       // Initialize a payment
-      const { email, amount, plan_id, user_id, callback_url, renewal_panel_id, renewal_months } = params;
+      const { email, amount, plan_id, user_id, callback_url, renewal_panel_id, renewal_months, panels_count, duration_months } = params;
 
       if (!email || !amount || !plan_id || !user_id) {
         throw new Error('Missing required parameters: email, amount, plan_id, user_id');
@@ -48,6 +48,8 @@ serve(async (req) => {
           callback_url,
           renewal_panel_id: renewal_panel_id || null,
           renewal_months: renewal_months || null,
+          panels_count: panels_count || null,
+          duration_months: duration_months || null,
         },
       });
 
@@ -74,6 +76,8 @@ serve(async (req) => {
             plan_id,
             renewal_panel_id: renewal_panel_id || null,
             renewal_months: renewal_months || null,
+            panels_count: panels_count || null,
+            duration_months: duration_months || null,
           },
         }),
       });
@@ -196,10 +200,9 @@ serve(async (req) => {
         }
 
         // Regular purchase flow - create new panels
-        const plan = transaction.plans;
-        if (!plan) {
-          throw new Error('Plan not found for transaction');
-        }
+        // Use panels_count and duration_months from metadata, or fallback to plan values
+        const panelsCount = metadata?.panels_count || transaction.plans?.panels_count || 1;
+        const durationMonths = metadata?.duration_months || Math.floor((transaction.plans?.duration_days || 30) / 30);
 
         // Update user profile
         const { data: profile } = await supabase
@@ -211,18 +214,18 @@ serve(async (req) => {
         const currentLimit = profile?.panels_limit || 0;
         await supabase.from('profiles').update({
           premium_status: 'approved',
-          panels_limit: currentLimit + plan.panels_count,
+          panels_limit: currentLimit + panelsCount,
         }).eq('id', transaction.user_id);
 
-        // Create panels with expiry
+        // Create panels with expiry (using months instead of days)
         const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + plan.duration_days);
+        expiresAt.setMonth(expiresAt.getMonth() + durationMonths);
 
         const panelsToCreate = [];
-        for (let i = 0; i < plan.panels_count; i++) {
+        for (let i = 0; i < panelsCount; i++) {
           panelsToCreate.push({
             user_id: transaction.user_id,
-            name: `ClaimedPanel_${Date.now()}_${i}`,
+            name: `Panel_${Date.now()}_${i + 1}`,
             language: 'nodejs',
             expires_at: expiresAt.toISOString(),
           });
@@ -230,13 +233,13 @@ serve(async (req) => {
 
         await supabase.from('panels').insert(panelsToCreate);
 
-        console.log(`Created ${plan.panels_count} panels for user ${transaction.user_id}`);
+        console.log(`Created ${panelsCount} panels for user ${transaction.user_id} with ${durationMonths} month(s) validity`);
 
         return new Response(JSON.stringify({
           success: true,
           status: 'success',
-          message: `Payment successful! ${plan.panels_count} panel(s) created.`,
-          panels_created: plan.panels_count,
+          message: `Payment successful! ${panelsCount} panel(s) created.`,
+          panels_created: panelsCount,
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
