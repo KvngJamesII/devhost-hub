@@ -9,6 +9,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { RedeemCodeDialog } from '@/components/admin/RedeemCodeDialog';
+import { AnalyticsOverview } from '@/components/admin/AnalyticsOverview';
+import { RevenueChart } from '@/components/admin/RevenueChart';
+import { UserGrowthChart } from '@/components/admin/UserGrowthChart';
+import { PanelStatusChart } from '@/components/admin/PanelStatusChart';
+import { TransactionsTable } from '@/components/admin/TransactionsTable';
+import { PlanPerformance } from '@/components/admin/PlanPerformance';
 import {
   ArrowLeft,
   Users,
@@ -32,6 +38,7 @@ import {
   Calendar,
   Settings,
   DollarSign,
+  BarChart3,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -109,6 +116,13 @@ interface ManagedPanel {
   user_email?: string;
 }
 
+interface AllPanel {
+  id: string;
+  status: string;
+  language: string;
+  created_at: string;
+}
+
 interface Transaction {
   id: string;
   user_id: string;
@@ -165,6 +179,7 @@ const Admin = () => {
   });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [allPanels, setAllPanels] = useState<AllPanel[]>([]);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -306,6 +321,15 @@ const Admin = () => {
 
     if (plansData) {
       setPlans(plansData as Plan[]);
+    }
+
+    // Fetch all panels for analytics
+    const { data: panelsData } = await supabase
+      .from('panels')
+      .select('id, status, language, created_at');
+
+    if (panelsData) {
+      setAllPanels(panelsData as AllPanel[]);
     }
 
     setLoading(false);
@@ -601,98 +625,16 @@ const Admin = () => {
       </header>
 
       <main className="p-4 pb-24 space-y-6">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Card className="bg-card border-border">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Users className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-2xl font-mono font-bold text-foreground">{stats.totalUsers}</p>
-                  <p className="text-xs text-muted-foreground font-mono">Total Users</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-card border-border">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center">
-                  <Crown className="w-5 h-5 text-warning" />
-                </div>
-                <div>
-                  <p className="text-2xl font-mono font-bold text-foreground">{stats.premiumUsers}</p>
-                  <p className="text-xs text-muted-foreground font-mono">Premium</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-card border-border">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
-                  <Server className="w-5 h-5 text-success" />
-                </div>
-                <div>
-                  <p className="text-2xl font-mono font-bold text-foreground">
-                    {stats.runningPanels}<span className="text-sm text-muted-foreground">/{stats.totalPanels}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground font-mono">Panels Active</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-card border-border">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
-                  <Ban className="w-5 h-5 text-destructive" />
-                </div>
-                <div>
-                  <p className="text-2xl font-mono font-bold text-foreground">{stats.bannedUsers}</p>
-                  <p className="text-xs text-muted-foreground font-mono">Banned</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Secondary Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Card className="bg-muted/30 border-border">
-            <CardContent className="p-3 text-center">
-              <p className="text-lg font-mono font-bold text-warning">{stats.pendingRequests}</p>
-              <p className="text-xs text-muted-foreground">Pending Requests</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-muted/30 border-border">
-            <CardContent className="p-3 text-center">
-              <p className="text-lg font-mono font-bold text-primary">{stats.activeCodesCount}</p>
-              <p className="text-xs text-muted-foreground">Active Codes</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-muted/30 border-border">
-            <CardContent className="p-3 text-center">
-              <p className="text-lg font-mono font-bold text-accent">{stats.totalRedemptions}</p>
-              <p className="text-xs text-muted-foreground">Redemptions</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-success/10 border-success/30">
-            <CardContent className="p-3 text-center">
-              <p className="text-lg font-mono font-bold text-success">₦{(stats.totalRevenue / 100).toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground">Total Revenue</p>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Analytics Overview */}
+        <AnalyticsOverview stats={stats} />
 
         {/* Tabs */}
-        <Tabs defaultValue="requests" className="space-y-4">
-          <TabsList className="w-full grid grid-cols-5 h-auto">
+        <Tabs defaultValue="analytics" className="space-y-4">
+          <TabsList className="w-full grid grid-cols-6 h-auto">
+            <TabsTrigger value="analytics" className="font-mono text-xs py-2">
+              <BarChart3 className="w-3 h-3 mr-1 hidden sm:inline" />
+              Analytics
+            </TabsTrigger>
             <TabsTrigger value="requests" className="font-mono text-xs py-2 relative">
               Requests
               {requests.length > 0 && (
@@ -704,6 +646,18 @@ const Admin = () => {
             <TabsTrigger value="codes" className="font-mono text-xs py-2">Codes</TabsTrigger>
             <TabsTrigger value="finance" className="font-mono text-xs py-2">Finance</TabsTrigger>
           </TabsList>
+
+          {/* Analytics Tab */}
+          <TabsContent value="analytics" className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <RevenueChart transactions={transactions} />
+              <UserGrowthChart users={users} />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <PanelStatusChart panels={allPanels} />
+              <PlanPerformance transactions={transactions} plans={plans} />
+            </div>
+          </TabsContent>
 
           {/* Requests Tab */}
           <TabsContent value="requests" className="space-y-3">
@@ -1028,76 +982,14 @@ const Admin = () => {
               </Card>
             </div>
 
-            {/* Transactions List */}
-            <Card>
-              <CardContent className="p-4">
-                <h3 className="font-mono font-bold mb-4 flex items-center gap-2">
-                  <Activity className="w-4 h-4" />
-                  Recent Transactions
-                </h3>
-                {transactions.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <DollarSign className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                    <p className="font-mono">No transactions yet</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {transactions.map((tx) => (
-                      <div
-                        key={tx.id}
-                        className={`p-3 rounded-lg border ${
-                          tx.status === 'success'
-                            ? 'border-success/30 bg-success/5'
-                            : tx.status === 'pending'
-                            ? 'border-warning/30 bg-warning/5'
-                            : 'border-destructive/30 bg-destructive/5'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="font-mono text-sm font-medium text-foreground truncate">
-                                {tx.user_email || 'Unknown User'}
-                              </p>
-                              <Badge
-                                variant={tx.status === 'success' ? 'default' : 'secondary'}
-                                className={`text-xs ${
-                                  tx.status === 'success'
-                                    ? 'bg-success text-success-foreground'
-                                    : tx.status === 'pending'
-                                    ? 'bg-warning text-warning-foreground'
-                                    : 'bg-destructive text-destructive-foreground'
-                                }`}
-                              >
-                                {tx.status.toUpperCase()}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                              <span>{tx.plan_name || 'Unknown Plan'}</span>
-                              <span>•</span>
-                              <span>{new Date(tx.created_at).toLocaleDateString()}</span>
-                              {tx.paystack_reference && (
-                                <>
-                                  <span>•</span>
-                                  <span className="font-mono">{tx.paystack_reference.slice(0, 15)}...</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className={`font-mono font-bold ${
-                              tx.status === 'success' ? 'text-success' : 'text-muted-foreground'
-                            }`}>
-                              ₦{(tx.amount / 100).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <RevenueChart transactions={transactions} />
+              <PlanPerformance transactions={transactions} plans={plans} />
+            </div>
+
+            {/* Transactions Table */}
+            <TransactionsTable transactions={transactions} />
 
             {/* Plans Management */}
             <Card>
