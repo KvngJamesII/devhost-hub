@@ -6,8 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Standard backend (DigitalOcean) - for Free/Basic users
 const VM_API_URL = Deno.env.get('VM_API_URL');
 const VM_API_KEY = Deno.env.get('VM_API_KEY');
+
+// Premium backend (AWS) - for Pro/Enterprise users
+const VM_API_URL_PREMIUM = Deno.env.get('VM_API_URL_PREMIUM') || 'http://56.228.75.32:3001';
+const VM_API_KEY_PREMIUM = Deno.env.get('VM_API_KEY_PREMIUM') || 'idev-premium-secret-key-2026';
+const VM_WS_URL_PREMIUM = Deno.env.get('VM_WS_URL_PREMIUM') || 'ws://56.228.75.32:3002';
+
+// Premium plan names (users with these plans get routed to AWS)
+const PREMIUM_TIERS = ['pro', 'enterprise'];
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -44,7 +53,7 @@ serve(async (req) => {
     const { action, panelId, ...params } = await req.json();
     console.log(`VM Proxy: ${action} for panel ${panelId} by user ${user.id}`);
 
-    // Verify user owns this panel
+    // Verify user owns this panel and get user's tier
     const { data: panel, error: panelError } = await supabase
       .from('panels')
       .select('id, user_id')
@@ -58,6 +67,17 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    // Get user's profile to check tier
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('premium_status')
+      .eq('id', panel.user_id)
+      .single();
+
+    // Check if user has a premium tier (Pro/Enterprise)
+    // Users with premium_status = 'approved' and panels_limit >= 5 are considered Pro+
+    const isPremiumUser = profile?.premium_status === 'approved';
 
     if (panel.user_id !== user.id) {
       // Check if user is admin
@@ -145,6 +165,26 @@ serve(async (req) => {
         vmMethod = 'DELETE';
         break;
 
+      // Terminal WebSocket info (for premium users)
+      case 'terminal:wsinfo':
+        if (isPremiumUser) {
+          return new Response(JSON.stringify({
+            wsUrl: `${VM_WS_URL_PREMIUM}/terminal/${panelId}?apiKey=${VM_API_KEY_PREMIUM}`,
+            isPremium: true
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } else {
+          return new Response(JSON.stringify({
+            isPremium: false,
+            message: 'Interactive terminal is only available for Pro/Enterprise users'
+          }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
       default:
         return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
           status: 400,
@@ -152,15 +192,25 @@ serve(async (req) => {
         });
     }
 
+    // Determine which backend to use based on user tier
+    const apiUrl = isPremiumUser ? VM_API_URL_PREMIUM : VM_API_URL;
+    const apiKey = isPremiumUser ? VM_API_KEY_PREMIUM : VM_API_KEY;
+
+    // For premium users, adjust the API paths for container-based backend
+    if (isPremiumUser) {
+      // Premium backend uses /api/containers instead of /api/apps
+      vmPath = vmPath.replace('/api/apps/', '/api/containers/');
+    }
+
     // Make request to VM API
-    const vmUrl = `${VM_API_URL}${vmPath}`;
-    console.log(`Calling VM API: ${vmMethod} ${vmUrl}`);
+    const vmUrl = `${apiUrl}${vmPath}`;
+    console.log(`Calling VM API (${isPremiumUser ? 'PREMIUM' : 'STANDARD'}): ${vmMethod} ${vmUrl}`);
 
     const vmResponse = await fetch(vmUrl, {
       method: vmMethod,
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': VM_API_KEY!,
+        'X-API-Key': apiKey!,
       },
       body: vmBody ? JSON.stringify(vmBody) : undefined,
     });

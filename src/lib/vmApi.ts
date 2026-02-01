@@ -95,6 +95,10 @@ export const vmApi = {
   exec: (panelId: string, command: string) => 
     vmApiCall<ExecResult>('terminal:exec', panelId, { command }),
 
+  // Get WebSocket terminal info (for premium users)
+  getTerminalWsInfo: (panelId: string) => 
+    vmApiCall<{ wsUrl?: string; isPremium: boolean; message?: string }>('terminal:wsinfo', panelId),
+
   // Log operations
   getLogs: (panelId: string, lines: number = 100) => 
     vmApiCall<LogsResult>('logs:get', panelId, { lines }),

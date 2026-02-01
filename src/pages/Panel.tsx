@@ -24,12 +24,14 @@ import {
   Clock,
   RotateCcw,
   CalendarClock,
+  Zap,
 } from 'lucide-react';
 import { FileManager } from '@/components/panel/FileManager';
 import { UnifiedConsole } from '@/components/panel/UnifiedConsole';
 import { StartupSettings } from '@/components/panel/StartupSettings';
 import { PanelSettings } from '@/components/panel/PanelSettings';
 import { RenewalWarning } from '@/components/panel/RenewalWarning';
+import { PremiumTerminal } from '@/components/panel/PremiumTerminal';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,7 +55,7 @@ interface Panel {
 
 const PanelPage = () => {
   const { id } = useParams<{ id: string }>();
-  const { user, loading: authLoading } = useAuth();
+  const { user, isPremium, loading: authLoading } = useAuth();
   const [panel, setPanel] = useState<Panel | null>(null);
   const [vmStatus, setVmStatus] = useState<AppStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -477,6 +479,14 @@ const PanelPage = () => {
             <Settings className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Settings</span>
           </TabsTrigger>
+          <TabsTrigger
+            value="terminal"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-3 sm:px-4 py-3"
+          >
+            <Zap className="w-4 h-4 sm:mr-2 text-yellow-500" />
+            <span className="hidden sm:inline">Terminal</span>
+            {isPremium && <Badge variant="outline" className="ml-1 text-[10px] px-1 py-0 text-yellow-500 border-yellow-500 hidden sm:inline">PRO</Badge>}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="console" className="flex-1 m-0">
@@ -493,6 +503,10 @@ const PanelPage = () => {
 
         <TabsContent value="settings" className="flex-1 m-0 overflow-y-auto">
           <PanelSettings panel={panel} onUpdate={fetchPanel} />
+        </TabsContent>
+
+        <TabsContent value="terminal" className="flex-1 m-0">
+          <PremiumTerminal panelId={panel.id} isPremiumUser={isPremium} />
         </TabsContent>
       </Tabs>
 
