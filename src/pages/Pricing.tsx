@@ -14,6 +14,7 @@ import {
   Crown,
   Star,
   Sparkles,
+  MessageCircle,
 } from 'lucide-react';
 
 interface Plan {
@@ -298,11 +299,7 @@ const Pricing = () => {
               </div>
 
               <Button
-                className={`w-full font-mono ${
-                  plan.is_popular
-                    ? 'bg-primary hover:bg-primary/90'
-                    : 'bg-secondary hover:bg-secondary/80'
-                }`}
+                className="w-full font-mono bg-primary hover:bg-primary/90 text-primary-foreground"
                 onClick={() => handlePurchase(plan)}
                 disabled={!!purchasing}
               >
@@ -361,6 +358,17 @@ const Pricing = () => {
           </p>
         </div>
       </main>
+
+      {/* Floating Support Button */}
+      <a
+        href="https://t.me/theidledeveloper"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 w-14 h-14 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform z-50"
+        title="Contact Support"
+      >
+        <MessageCircle className="w-6 h-6" />
+      </a>
     </div>
   );
 };
